@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Library</OutputType>
+    <PackAsTool>false</PackAsTool>
+    <PackageId>CharismaORM</PackageId>
+    <Version>1.1.4</Version>
+    <Authors>Snufie</Authors>
+    <Description>Charisma libraries bundled as a dotnet package.</Description>
+    <PackIncludeSymbols>false</PackIncludeSymbols>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+  </PropertyGroup>
+  <!-- <ItemGroup>
+    <ProjectReference Include="..\Charisma.Generator\Charisma.Generator.csproj" />
+    <ProjectReference Include="..\Charisma.Migration\Charisma.Migration.csproj" />
+    <ProjectReference Include="..\Charisma.Parser\Charisma.Parser.csproj" />
+    <ProjectReference Include="..\Charisma.Runtime\Charisma.Runtime.csproj" />
+    <ProjectReference Include="..\Charisma.Schema\Charisma.Schema.csproj" />
+    <ProjectReference Include="..\Charisma.QueryEngine\Charisma.QueryEngine.csproj" />
+  </ItemGroup> -->
+  
+  <ItemGroup>
+    <PackageReference Include="Charisma.Runtime" Version="1.0.4" />
+    <PackageReference Include="Charisma.QueryEngine" Version="1.0.4" />
+    <PackageReference Include="Charisma.Schema" Version="1.0.4" />
+  </ItemGroup>
+</Project>

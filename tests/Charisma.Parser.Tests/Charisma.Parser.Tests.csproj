@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <LangVersion>12</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Charisma.Parser\Charisma.Parser.csproj" />
+    <ProjectReference Include="..\..\src\Charisma.Schema\Charisma.Schema.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+  <PackageReference Include="xunit" Version="2.9.3" />
+  <PackageReference Include="xunit.runner.visualstudio" Version="2.5.6" />
+  <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
+</ItemGroup>
+
+</Project>

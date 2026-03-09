@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>12</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>charisma</ToolCommandName>
+    <PackageId>CharismaCLI</PackageId>
+    <Version>1.0.1</Version>
+    <Authors>Snufie</Authors>
+    <Description>Charisma CLI as a dotnet tool.</Description>
+    <PackIncludeSymbols>false</PackIncludeSymbols>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Charisma.Schema\Charisma.Schema.csproj" />
+    <ProjectReference Include="..\Charisma.Parser\Charisma.Parser.csproj" />
+    <ProjectReference Include="..\Charisma.Generator\Charisma.Generator.csproj" />
+    <ProjectReference Include="..\Charisma.Runtime\Charisma.Runtime.csproj" />
+    <ProjectReference Include="..\Charisma.Migration\Charisma.Migration.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="5.0.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
+  </ItemGroup>
+
+</Project>

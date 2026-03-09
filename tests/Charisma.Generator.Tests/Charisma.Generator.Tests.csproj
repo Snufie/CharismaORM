@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.2" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Charisma.Generator\Charisma.Generator.csproj" />
+    <ProjectReference Include="..\..\src\Charisma.Parser\Charisma.Parser.csproj" />
+    <ProjectReference Include="..\..\src\Charisma.Schema\Charisma.Schema.csproj" />
+    <ProjectReference Include="..\..\src\Charisma.Client\Charisma.Client.csproj" />
+    <ProjectReference Include="..\..\src\Charisma.Runtime\Charisma.Runtime.csproj" />
+    <ProjectReference Include="..\..\src\Charisma.QueryEngine\Charisma.QueryEngine.csproj" />
+  </ItemGroup>
+
+</Project>
