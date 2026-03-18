@@ -1,0 +1,31 @@
+site_name: CharismaORM Docs
+site_description: Schema-first ORM documentation for CharismaORM
+repo_name: Snufie/CharismaV2
+repo_url: https://github.com/Snufie/CharismaV2
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Quickstart: getting-started/quickstart.md
+      - First Steps: getting-started/first-steps.md
+      - Mental Model: getting-started/mental-model.md
+  - Core Concepts:
+      - Schema DSL: core/schema-dsl.md
+      - Code Generation: core/generation.md
+      - Runtime Client: core/runtime-client.md
+      - Querying Data: core/queries.md
+      - Transactions: core/transactions.md
+      - JSON Fields: core/json.md
+  - Operations:
+      - CLI Reference: operations/cli.md
+      - CLI Completion Roadmap: operations/cli-roadmap.md
+      - Migrations and Introspection: operations/migrations.md
+      - Release Gates: operations/release-gates.md
+  - Architecture:
+      - Overview: architecture/overview.md
+      - Example ERD: architecture/erd.md
+  - Reference:
+      - Capability Matrix: reference/capabilities-matrix.md
+      - Error Reference: reference/error-reference.md
+      - Project Map: reference/project-map.md
+      - Limitations: reference/limitations.md
