@@ -83,19 +83,31 @@ jobs:
           done
 
       - name: Configure GitHub Packages source
+        env:
+          GH_TOKEN_FALLBACK: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
+          TOKEN="$GH_TOKEN_FALLBACK"
+
           dotnet nuget remove source github 2>/dev/null || true
           dotnet nuget add source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
             --name github \
             --username "${{ github.actor }}" \
-            --password "${{ secrets.GITHUB_TOKEN }}" \
+            --password "$TOKEN" \
             --store-password-in-clear-text
 
       - name: Publish to GitHub Packages
         shell: bash
+        env:
+          GH_TOKEN_FALLBACK: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          dotnet nuget push "artifacts/packages/*.nupkg" --source github --api-key "${{ secrets.GITHUB_TOKEN }}" --skip-duplicate
+          TOKEN="$GH_TOKEN_FALLBACK"
+
+          for pkg in artifacts/packages/*.nupkg; do
+            echo "Pushing $(basename "$pkg") to GitHub Packages"
+            dotnet nuget push "$pkg" --source github --api-key "$TOKEN" --skip-duplicate
+          done
 
       - name: Publish to NuGet.org (stable only)
         shell: bash
@@ -114,8 +126,12 @@ jobs:
 
       - name: NuGet consumer smoke test (private feed)
         shell: bash
+        env:
+          GH_TOKEN_FALLBACK: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          TOKEN="$GH_TOKEN_FALLBACK"
+
           rm -rf ./artifacts/consumer
           mkdir -p ./artifacts/consumer
           pushd ./artifacts/consumer
@@ -127,7 +143,7 @@ jobs:
           dotnet nuget add source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
             --name github \
             --username "${{ github.actor }}" \
-            --password "${{ secrets.GITHUB_TOKEN }}" \
+            --password "$TOKEN" \
             --store-password-in-clear-text
 
           dotnet add package CharismaORM --version "${{ steps.version.outputs.version }}" --source github
