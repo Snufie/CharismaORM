@@ -18,25 +18,19 @@ dotnet build Charisma.sln
 
 Use `schema.charisma` at the repository root or create your own minimal file.
 
-Example minimal schema:
+Example minimal schema (datasource/generator blocks optional):
 
 ```charisma
-datasource db {
-  provider = "postgresql"
-  url = env("DATABASE_URL")
-}
-
-generator client {
-  provider = "charisma-generator"
-  output = "./Generated"
-}
-
 model Robot {
   id        Id       @id @default(uuid())
   name      String
   createdAt DateTime @default(now())
 }
 ```
+
+You can omit `datasource` and `generator` blocks in your schema. Instead, set them via runtime options in your application (preferred for ASP.NET and DI scenarios).
+
+---
 
 ## 4. Generate the Typed Client
 
@@ -70,23 +64,53 @@ using Charisma.Runtime;
 
 var options = new CharismaRuntimeOptions
 {
-    ConnectionString = Environment.GetEnvironmentVariable("DATABASE_URL")!,
-    RootNamespace = "MyApp.Generated",
-    Provider = ProviderOptions.PostgreSQL
+  ConnectionString = Environment.GetEnvironmentVariable("DATABASE_URL")!,
+  RootNamespace = "MyApp.Generated",
+  Provider = ProviderOptions.PostgreSQL
 };
 
 using var client = new CharismaClient(options);
 
 var created = await client.Robot.CreateAsync(new RobotCreateArgs
 {
-    Data = new RobotCreateInput
-    {
-        Id = Guid.NewGuid(),
-        Name = "R-001"
-    }
+  Data = new RobotCreateInput
+  {
+    Id = Guid.NewGuid(),
+    Name = "R-001"
+  }
 });
 
 var all = await client.Robot.FindManyAsync();
+```
+
+---
+
+## 6b. ASP.NET Dependency Injection Example
+
+You can register CharismaClient with DI in ASP.NET apps, using runtime options for configuration:
+
+```csharp
+using Charisma.Runtime;
+using Microsoft.Extensions.DependencyInjection;
+
+builder.Services.AddSingleton<CharismaRuntimeOptions>(sp => new CharismaRuntimeOptions
+{
+  ConnectionString = builder.Configuration.GetConnectionString("DefaultConnection"),
+  RootNamespace = "MyApp.Generated",
+  Provider = ProviderOptions.PostgreSQL
+});
+
+builder.Services.AddScoped<CharismaClient>(sp =>
+  new CharismaClient(sp.GetRequiredService<CharismaRuntimeOptions>()));
+
+// Usage in controller/service:
+public class RobotController : ControllerBase
+{
+  private readonly CharismaClient _client;
+  public RobotController(CharismaClient client) => _client = client;
+
+  // ... use _client.Robot ...
+}
 ```
 
 ## 7. Common First Errors

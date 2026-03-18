@@ -312,8 +312,79 @@ public static class Program
 
     private static int HandleMigrate(string[] args)
     {
-        Console.Error.WriteLine("migrate commands are not implemented yet (planned: diff/apply/status/reset).");
-        return 1;
+        // Usage: charisma migrate <schemaPath?> [--connection <conn>]
+        var schemaPath = args.Length >= 2 && !args[1].StartsWith("--", StringComparison.OrdinalIgnoreCase)
+            ? args[1]
+            : Path.Combine(Directory.GetCurrentDirectory(), "schema.charisma");
+
+        if (!File.Exists(schemaPath))
+        {
+            Console.Error.WriteLine($"Schema file not found: {schemaPath}");
+            return 1;
+        }
+
+        string? connectionString = null;
+        for (int i = 2; i < args.Length - 1; i++)
+        {
+            if (args[i] == "--connection" && i + 1 < args.Length)
+            {
+                connectionString = args[i + 1];
+                break;
+            }
+        }
+
+        var schemaText = File.ReadAllText(schemaPath);
+        RoslynSchemaParser parser = new();
+        var schema = parser.Parse(schemaText);
+        connectionString ??= ResolveConnectionString(null, schema);
+        if (connectionString is null)
+        {
+            Console.Error.WriteLine("Connection string is required (provide --connection or set it in datasource url/env in the schema file).");
+            return 1;
+        }
+
+        try
+        {
+            var options = new PostgresMigrationOptions(allowDestructive: true, allowDataLoss: true);
+            var planner = new PostgresMigrationPlanner(new PostgresIntrospectionOptions(connectionString), options);
+            var plan = planner.PlanAsync(schema).GetAwaiter().GetResult();
+
+            Console.WriteLine($"Migration plan: {plan.Steps.Count} step(s), {plan.Steps.Count(s => s.IsDestructive)} destructive, {plan.Warnings.Count} warning(s), {plan.Unexecutable.Count} unexecutable.");
+            for (int i = 0; i < plan.Steps.Count; i++)
+            {
+                var step = plan.Steps[i];
+                var marker = step.IsDestructive ? "!" : "-";
+                Console.WriteLine($"  [{i + 1}] {marker} {step.Description}");
+            }
+
+            if (plan.HasUnexecutable)
+            {
+                Console.WriteLine("Found unexecutable changes:");
+                foreach (var msg in plan.Unexecutable)
+                {
+                    Console.WriteLine($"- {msg}");
+                }
+                Console.WriteLine("Migration cannot proceed. Use db push --force-reset to recreate the database if needed.");
+                return 1;
+            }
+
+            if (plan.Steps.Count == 0)
+            {
+                Console.WriteLine("Database is already in sync with schema. No migration needed.");
+                return 0;
+            }
+
+            var runner = new PostgresMigrationRunner(connectionString);
+            runner.ExecuteAsync(plan, options).GetAwaiter().GetResult();
+
+            Console.WriteLine("Migration completed successfully.");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(ex.ToString());
+            return 1;
+        }
     }
 
     private static (bool Success, string SchemaPath, string? ConnectionString, bool Force) ParseDbPullArgs(string[] args)
@@ -438,25 +509,17 @@ public static class Program
     private static string? ResolveConnectionString(string? supplied, CharismaSchema? existingSchema)
     {
         if (!string.IsNullOrEmpty(supplied))
-        {
             return supplied;
-        }
 
         // Global env fallback
         var env = Environment.GetEnvironmentVariable("CHARISMA_CONNECTION_STRING")
                   ?? Environment.GetEnvironmentVariable("DATABASE_URL");
         if (!string.IsNullOrWhiteSpace(env))
-        {
             return env;
-        }
 
-        if (existingSchema is null)
+        if (existingSchema is null || existingSchema.Datasources.Count == 0)
         {
-            return null;
-        }
-
-        if (existingSchema.Datasources.Count == 0)
-        {
+            Console.Error.WriteLine("No connection string found. Provide --connection, set CHARISMA_CONNECTION_STRING or DATABASE_URL, or use runtime options in your app.");
             return null;
         }
 
@@ -473,9 +536,7 @@ public static class Program
 
         // Strip quotes if present
         if (url.StartsWith("\"", StringComparison.Ordinal) && url.EndsWith("\"", StringComparison.Ordinal))
-        {
             url = url.Substring(1, url.Length - 2);
-        }
 
         return url;
     }
