@@ -1,0 +1,122 @@
+// example schema for a robotics management system
+
+enum LaadStatusEnum {
+  LADEN
+  VOL
+  LOW
+  IDLE
+}
+
+enum SensorTypeEnum {
+  TEMPERATUUR
+  DRUK
+  VOCHT
+  LICHT
+  ANDERS
+}
+
+enum SensorStatusEnum {
+  ACTIEF
+  INACTIEF
+  DEFECT
+}
+
+enum CommandoTypeEnum {
+  START
+  STOP
+  MOVE
+  SHUTDOWN
+  CUSTOM
+}
+
+enum CommandoStatusEnum {
+  VERZONDEN
+  UITGEVOERD
+  MISLUKT
+  IN_AFWACHTING
+}
+
+enum GebruikerRolEnum {
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+model Locatie {
+  LocatieID    Id   @id @db.Uuid
+  Naam         String
+  Adres        String?  
+  AantalRobots Int?
+  created_at   DateTime @default(now()) @db.Timestamptz
+  updated_at   DateTime @updatedAt
+
+  // back relation
+  Robots       Robot[]
+}
+
+model Gebruiker {
+  UserID      Id           @id @db.Uuid @default(uuid())
+  Naam        String
+  Email       String           @unique
+  Rol         GebruikerRolEnum
+  created_at  DateTime         @default(now()) @db.Timestamptz
+  updated_at  DateTime         @updatedAt
+
+  // back relation
+  CommandosVerzonden Commando[]  @relation("Gebruiker_Commandos")
+}
+
+model Robot {
+  RobotID      Id    @id @db.Uuid @default(uuid())
+  LocatieID    Id?   @db.Uuid
+  Naam         String
+  Model        String?
+  Actief       Boolean   @default(true)
+  BatterijPercentage Int? 
+  LaadStatus   LaadStatusEnum
+  created_at   DateTime  @default(now()) @db.Timestamptz
+  updated_at   DateTime  @updatedAt
+
+  Locatie      Locatie?  @relation(fk: (Robot.LocatieID), pk: [Locatie.LocatieID])
+  Sensors      Sensor[]
+  Commandos    Commando[]
+}
+
+model Sensor {
+  SensorID    Id          @id @db.Uuid @default(uuid())
+  RobotID     Id          @db.Uuid
+  Type        SensorTypeEnum
+  MeetEenheid String?
+  Status      SensorStatusEnum
+  created_at  DateTime        @default(now()) @db.Timestamptz
+  updated_at  DateTime        @updatedAt
+
+  Robot       Robot           @relation(fk: (Sensor.RobotID), pk: (Robot.RobotID))
+  Metingen    Meting[]
+}
+
+model Meting {
+  MetingID   Id   @id @db.Uuid @default(uuid())
+  SensorID   Id   @db.Uuid
+  Waarde     Decimal
+  created_at DateTime @default(now()) @db.Timestamptz
+  updated_at DateTime @updatedAt
+
+  Sensor     Sensor   @relation(fk: (Meting.SensorID), pk: (Sensor.SensorID))
+}
+
+model Commando {
+  CommandoID        Id           @id @db.Uuid @default(uuid())
+  RobotID           Id           @db.Uuid
+  VerzondenDoorUserID Id?        @db.Uuid
+  Type              CommandoTypeEnum
+  Payload           Json?
+  Status            CommandoStatusEnum
+  FoutCode          String?
+  Response          Json?
+  created_at        DateTime         @default(now()) @db.Timestamptz
+  updated_at        DateTime         @updatedAt
+
+  Robot             Robot            @relation(fk: (Commando.RobotID), pk: (Robot.RobotID))
+  VerzondenDoor     Gebruiker?       @relation("Gebruiker_Commandos", fk: (Commando.VerzondenDoorUserID), pk:(Gebruiker.UserID))
+}

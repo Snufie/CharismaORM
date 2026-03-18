@@ -46,5 +46,5 @@ tests/TestApp/
 # Charisma-specific
 backupschema.txt
 *.sql
-*.charisma
+/src/**/*.charisma
 *.old.cs
