@@ -18,15 +18,15 @@ var count = await client.Robot.CountAsync(r => r.Status == RobotStatus.Active);
 
 ## Method Signatures
 
-All methods are async and return Task or Task<T>. See generated code headers for full signatures and overloads.
+All methods are async and return `Task` or `Task<T>`. See generated code headers for full signatures and overloads.
 
 ## Troubleshooting & Best Practices
 
-- Always check for null when using FindFirst/FindUnique.
-- Use FindFirstOrThrow for strict existence checks.
+- Always check for null when using `FindFirst`/`FindUnique`.
+- Use `FindFirstOrThrow` for strict existence checks.
 - Prefer filter lambdas for simple queries, filter objects for complex conditions.
 - Use projections to minimize data transfer.
-- For composite keys, use FindByCompositeAsync or custom FindBy\* methods.
+- For composite keys, use `FindByCompositeAsync` or custom `FindBy*` methods.
 
 ## Advanced Usage Examples
 
@@ -66,7 +66,3 @@ var stats = await client.Robot.GroupByAsync(new GroupByArgs { By = new[] { "Stat
 - [Query Features](query-features.md)
 - [Sugar Methods](sugar-methods.md)
 - [Transactions](transactions-full.md)
-
-## Method Signatures
-
-See generated code headers for full signatures and overloads.
