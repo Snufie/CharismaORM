@@ -38,11 +38,16 @@ internal sealed class ClientWriter : IWriter
         var unit = SyntaxFactory.CompilationUnit()
             .AddUsings(
                 SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System")),
+                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System.IO")),
                 SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System.Threading")),
                 SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System.Threading.Tasks")),
+                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("Charisma.Migration")),
+                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("Charisma.Migration.Postgres")),
+                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("Charisma.Parser")),
                 SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("Charisma.QueryEngine")),
                 SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("Charisma.QueryEngine.Execution")),
                 SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("Charisma.Runtime")),
+                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("Charisma.Schema")),
                 SyntaxFactory.UsingDirective(SyntaxFactory.ParseName($"{_rootNamespace}.Models")))
             .AddMembers(@namespace)
             .NormalizeWhitespace();
@@ -62,6 +67,8 @@ internal sealed class ClientWriter : IWriter
             BuildExecutorField(),
             BuildConstructor(),
             BuildInternalConstructor(),
+            BuildMigrateFromSchemaPathMethod(),
+            BuildMigrateMethod(),
             BuildDispose()
         };
 
@@ -145,6 +152,73 @@ internal sealed class ClientWriter : IWriter
             .WithLeadingTrivia(BuildDoc(
                 "Creates a scoped client bound to an existing runtime and executor.",
                 new[] { ("runtime", "Existing runtime instance."), ("executor", "Scoped query executor.") }));
+    }
+
+    /// <summary>
+    /// Builds a startup migration helper that accepts a schema file path for one-liner startup usage.
+    /// </summary>
+    private static MethodDeclarationSyntax BuildMigrateFromSchemaPathMethod()
+    {
+        return SyntaxFactory.MethodDeclaration(
+                SyntaxFactory.ParseTypeName("Task<MigrationPlan>"),
+                "MigrateAsync")
+            .AddModifiers(SyntaxFactory.Token(SyntaxKind.PublicKeyword), SyntaxFactory.Token(SyntaxKind.AsyncKeyword))
+            .AddParameterListParameters(
+                SyntaxFactory.Parameter(SyntaxFactory.Identifier("schemaPath"))
+                    .WithType(SyntaxFactory.ParseTypeName("string"))
+                    .WithDefault(SyntaxFactory.EqualsValueClause(SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal("schema.charisma")))),
+                SyntaxFactory.Parameter(SyntaxFactory.Identifier("options"))
+                    .WithType(SyntaxFactory.ParseTypeName("PostgresMigrationOptions?"))
+                    .WithDefault(SyntaxFactory.EqualsValueClause(SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression))),
+                SyntaxFactory.Parameter(SyntaxFactory.Identifier("ct"))
+                    .WithType(SyntaxFactory.ParseTypeName("CancellationToken"))
+                    .WithDefault(SyntaxFactory.EqualsValueClause(SyntaxFactory.IdentifierName("default"))))
+            .WithBody(SyntaxFactory.Block(
+                SyntaxFactory.ParseStatement("if (string.IsNullOrWhiteSpace(schemaPath)) throw new ArgumentException(\"Schema path is required.\", nameof(schemaPath));"),
+                SyntaxFactory.ParseStatement("if (!File.Exists(schemaPath)) throw new FileNotFoundException(\"Schema file not found.\", schemaPath);"),
+                SyntaxFactory.ParseStatement("var schemaText = await File.ReadAllTextAsync(schemaPath, ct).ConfigureAwait(false);"),
+                SyntaxFactory.ParseStatement("var schema = new RoslynSchemaParser().Parse(schemaText);"),
+                SyntaxFactory.ParseStatement("return await _runtime.MigrateAsync(schema, options, ct).ConfigureAwait(false);")))
+            .WithLeadingTrivia(BuildDoc(
+                "One-liner startup migration helper that loads and migrates from a schema file path.",
+                new[]
+                {
+                    ("schemaPath", "Path to the schema file. Defaults to schema.charisma."),
+                    ("options", "Optional migration safety options."),
+                    ("ct", "Cancellation token for the async operation.")
+                },
+                "The computed migration plan that was applied (or empty when already in sync)."));
+    }
+
+    /// <summary>
+    /// Builds a startup migration helper that proxies to the runtime.
+    /// </summary>
+    private static MethodDeclarationSyntax BuildMigrateMethod()
+    {
+        return SyntaxFactory.MethodDeclaration(
+                SyntaxFactory.ParseTypeName("Task<MigrationPlan>"),
+                "MigrateAsync")
+            .AddModifiers(SyntaxFactory.Token(SyntaxKind.PublicKeyword), SyntaxFactory.Token(SyntaxKind.AsyncKeyword))
+            .AddParameterListParameters(
+                SyntaxFactory.Parameter(SyntaxFactory.Identifier("schema"))
+                    .WithType(SyntaxFactory.IdentifierName("CharismaSchema")),
+                SyntaxFactory.Parameter(SyntaxFactory.Identifier("options"))
+                    .WithType(SyntaxFactory.ParseTypeName("PostgresMigrationOptions?"))
+                    .WithDefault(SyntaxFactory.EqualsValueClause(SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression))),
+                SyntaxFactory.Parameter(SyntaxFactory.Identifier("ct"))
+                    .WithType(SyntaxFactory.ParseTypeName("CancellationToken"))
+                    .WithDefault(SyntaxFactory.EqualsValueClause(SyntaxFactory.IdentifierName("default"))))
+            .WithBody(SyntaxFactory.Block(
+                SyntaxFactory.ParseStatement("return await _runtime.MigrateAsync(schema, options, ct).ConfigureAwait(false);")))
+            .WithLeadingTrivia(BuildDoc(
+                "Plans and applies database migrations for the supplied schema.",
+                new[]
+                {
+                    ("schema", "Target schema definition to apply."),
+                    ("options", "Optional migration safety options."),
+                    ("ct", "Cancellation token for the async operation.")
+                },
+                "The computed migration plan that was applied (or empty when already in sync)."));
     }
 
     /// <summary>

@@ -79,6 +79,54 @@ public class PlannerBehaviorTests
         Assert.Contains("\"t1\".\"value\" AS \"t1__value\"", plan.CommandText, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void FindUnique_accepts_composite_selector_payload()
+    {
+        var meta = QueryEngineTestModels.BuildMembershipModel();
+        var planner = QueryEngineTestModels.BuildPlanner(meta);
+        var userId = Guid.NewGuid();
+        var teamId = Guid.NewGuid();
+
+        var plan = planner.Plan(new FindUniqueQueryModel("Membership", new
+        {
+            Where = new
+            {
+                ByUserIdAndTeamId = new
+                {
+                    UserId = userId,
+                    TeamId = teamId
+                }
+            }
+        }));
+
+        Assert.Contains("\"t0\".\"userid\" = @p1", plan.CommandText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"t0\".\"teamid\" = @p2", plan.CommandText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(plan.Parameters, p => Equals(p.Value, userId));
+        Assert.Contains(plan.Parameters, p => Equals(p.Value, teamId));
+    }
+
+    [Fact]
+    public void FindUnique_throws_when_multiple_unique_selectors_are_provided()
+    {
+        var meta = QueryEngineTestModels.BuildMembershipModel();
+        var planner = QueryEngineTestModels.BuildPlanner(meta);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => planner.Plan(new FindUniqueQueryModel("Membership", new
+        {
+            Where = new
+            {
+                Email = "ops@team.local",
+                ByUserIdAndTeamId = new
+                {
+                    UserId = Guid.NewGuid(),
+                    TeamId = Guid.NewGuid()
+                }
+            }
+        })));
+
+        Assert.Contains("ambiguous", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static ModelMetadata BuildSimpleModel()
     {
         return new ModelMetadata(

@@ -972,10 +972,17 @@ internal sealed class ArgsWriter : IWriter
         var baseType = typeName.TrimEnd('?');
         if (_enumNames.Contains(baseType)) return false;
 
+        // Be conservative: only null-forgive known reference-like types.
+        // Unknown identifiers might be structs (e.g., Json, enums from external schemas).
         return baseType switch
         {
-            "int" or "bool" or "double" or "decimal" or "DateTime" or "Guid" => false,
-            _ => true
+            "string" or "byte[]" => true,
+            _ when baseType.StartsWith("IReadOnlyList<", StringComparison.Ordinal)
+                || baseType.StartsWith("List<", StringComparison.Ordinal)
+                || baseType.StartsWith("IEnumerable<", StringComparison.Ordinal)
+                || baseType.StartsWith("Dictionary<", StringComparison.Ordinal)
+                || baseType.StartsWith("IReadOnlyDictionary<", StringComparison.Ordinal) => true,
+            _ => false
         };
     }
 

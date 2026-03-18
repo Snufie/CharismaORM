@@ -301,6 +301,23 @@ namespace Charisma.Parser
                     }
                 }
 
+                // UUIDv7 already embeds creation time, so prohibit a parallel created_at marker field.
+                var hasUuidV7Pk = builder.Fields.Any(f =>
+                    f.IsId
+                    && f.DefaultValue?.Kind == DefaultValueKind.UuidV7);
+                if (hasUuidV7Pk)
+                {
+                    var createdMarker = builder.Fields.FirstOrDefault(f =>
+                        string.Equals(f.Name, "created_at", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(f.Name, "createdAt", StringComparison.OrdinalIgnoreCase));
+                    if (createdMarker is not null)
+                    {
+                        errors.Add(new CharismaSchemaException(
+                            $"Model '{builder.Name}' uses UUIDv7 primary keys; remove '{createdMarker.Name}' because creation timestamp is encoded in the UUID.",
+                            createdMarker.Span));
+                    }
+                }
+
                 // Parse model-level directives (@@id, @@unique, @@index)
                 foreach (var raw in builder.ModelLevelDirectivesRaw)
                 {
@@ -769,7 +786,6 @@ namespace Charisma.Parser
             var fields = new List<FieldBuilder>();
             var modelLevelDirectives = new List<string>();
 
-            int depth = 0;
             bool started = false;
 
             for (int i = startIndex; i < lines.Count; i++)
@@ -781,20 +797,15 @@ namespace Charisma.Parser
 
                 if (!started)
                 {
-                    if (trimmed.EndsWith('{')) { started = true; depth = 1; continue; }
+                    if (trimmed.EndsWith('{')) { started = true; continue; }
                     errors.Add(new CharismaSchemaException($"Malformed model declaration for '{modelName}'", lines[i].Span));
                     return (new ModelBuilder(modelName, fields, modelLevelDirectives), i + 1);
                 }
 
-                if (trimmed.Contains('{')) depth++;
-                if (trimmed.Contains('}'))
+                // Only a standalone closing brace should terminate the block. Field literals may contain braces.
+                if (trimmed == "}")
                 {
-                    depth--;
-                    if (depth == 0)
-                    {
-                        return (new ModelBuilder(modelName, fields, modelLevelDirectives), i + 1);
-                    }
-                    continue;
+                    return (new ModelBuilder(modelName, fields, modelLevelDirectives), i + 1);
                 }
 
                 var md = ModelDirectiveRegex.Match(trimmed);
@@ -848,7 +859,6 @@ namespace Charisma.Parser
         {
             var values = new List<string>();
 
-            int depth = 0;
             bool started = false;
 
             for (int i = startIndex; i < lines.Count; i++)
@@ -860,17 +870,15 @@ namespace Charisma.Parser
 
                 if (!started)
                 {
-                    if (trimmed.EndsWith('{')) { started = true; depth = 1; continue; }
+                    if (trimmed.EndsWith('{')) { started = true; continue; }
                     errors.Add(new CharismaSchemaException($"Malformed enum declaration for '{enumName}'", lines[i].Span));
                     return (new EnumDefinition(enumName, values), i + 1);
                 }
 
-                if (trimmed.Contains('{')) depth++;
-                if (trimmed.Contains('}'))
+                // Only a standalone closing brace should terminate the block.
+                if (trimmed == "}")
                 {
-                    depth--;
-                    if (depth == 0) return (new EnumDefinition(enumName, values), i + 1);
-                    continue;
+                    return (new EnumDefinition(enumName, values), i + 1);
                 }
 
                 var m = EnumValueRegex.Match(trimmed);
@@ -957,7 +965,8 @@ namespace Charisma.Parser
                     return null;
                 }
 
-                var isV7 = lowered.Contains("uuid(7)");
+                var isV7 = lowered.StartsWith("uuidv7(", StringComparison.Ordinal)
+                    || lowered.Contains("uuid(7)", StringComparison.Ordinal);
                 return new DefaultValueDefinition(isV7 ? DefaultValueKind.UuidV7 : DefaultValueKind.UuidV4);
             }
 

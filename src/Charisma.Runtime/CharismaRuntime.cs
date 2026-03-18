@@ -1,7 +1,11 @@
 using System;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
+using Charisma.Migration;
+using Charisma.Migration.Postgres;
 using Charisma.QueryEngine.Execution;
+using Charisma.Schema;
 
 namespace Charisma.Runtime;
 
@@ -13,6 +17,8 @@ public sealed class CharismaRuntime : IDisposable
     private readonly ISqlExecutor _sqlExecutor;
     private readonly IConnectionProvider _connectionProvider;
     private readonly bool _ownsConnectionProvider;
+    private readonly string _connectionString;
+    private readonly ProviderOptions _provider;
 
     public IConnectionProvider ConnectionProvider => _connectionProvider;
     public ISqlExecutor SqlExecutor => _sqlExecutor;
@@ -34,6 +40,8 @@ public sealed class CharismaRuntime : IDisposable
             throw new ArgumentException("RootNamespace is required to resolve generated code.", nameof(options));
         }
 
+        _connectionString = options.ConnectionString;
+        _provider = options.Provider;
         _connectionProvider = options.ConnectionProvider ?? new PostgresConnectionProvider(options.ConnectionString);
         _ownsConnectionProvider = options.ConnectionProvider is null;
 
@@ -42,6 +50,39 @@ public sealed class CharismaRuntime : IDisposable
             ProviderOptions.PostgreSQL => BuildPostgresExecutor(options, _connectionProvider),
             _ => throw new NotSupportedException($"Provider '{options.Provider}' is not supported.")
         };
+    }
+
+    /// <summary>
+    /// Plans and applies schema migrations for the configured provider. Intended for app startup flows.
+    /// </summary>
+    /// <param name="schema">Desired schema state to migrate to.</param>
+    /// <param name="options">Migration safety options. Defaults to conservative settings.</param>
+    /// <param name="cancellationToken">Cancellation token for the migration operation.</param>
+    /// <returns>The computed migration plan that was applied (or empty when already in sync).</returns>
+    public async Task<MigrationPlan> MigrateAsync(
+        CharismaSchema schema,
+        PostgresMigrationOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(schema);
+
+        if (_provider != ProviderOptions.PostgreSQL)
+        {
+            throw new NotSupportedException($"Startup migration is only supported for provider '{ProviderOptions.PostgreSQL}'.");
+        }
+
+        var migrationOptions = options ?? new PostgresMigrationOptions();
+        var planner = new PostgresMigrationPlanner(new PostgresIntrospectionOptions(_connectionString), migrationOptions);
+        var plan = await planner.PlanAsync(schema, cancellationToken).ConfigureAwait(false);
+
+        if (plan.Steps.Count == 0)
+        {
+            return plan;
+        }
+
+        var runner = new PostgresMigrationRunner(_connectionString);
+        await runner.ExecuteAsync(plan, migrationOptions, cancellationToken).ConfigureAwait(false);
+        return plan;
     }
 
     /// <summary>

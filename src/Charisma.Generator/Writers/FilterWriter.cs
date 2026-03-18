@@ -255,12 +255,23 @@ internal sealed class FilterWriter : IWriter
     /// </summary>
     private CompilationUnitSyntax BuildModelFiltersUnit(CharismaSchema schema, ModelDefinition model)
     {
+        var compositeSelectors = BuildCompositeUniqueSelectors(schema, model);
+
         var members = new List<MemberDeclarationSyntax>
         {
             BuildWhereInput(schema, model),
-            BuildWhereUniqueInput(schema, model),
-            BuildRelationFilter(schema, model)
+            BuildWhereUniqueInput(schema, model, compositeSelectors),
         };
+
+        foreach (var selector in compositeSelectors)
+        {
+            members.Add(BuildCompositeSelectorInputClass(schema, model, selector));
+        }
+
+        members.AddRange(
+        [
+            BuildRelationFilter(schema, model)
+        ]);
 
         var @namespace = SyntaxFactory.NamespaceDeclaration(
                 SyntaxFactory.ParseName($"{_rootNamespace}.Filters"))
@@ -308,9 +319,9 @@ internal sealed class FilterWriter : IWriter
     }
 
     /// <summary>
-    /// Builds unique filter input using single-field unique constraints/PKs.
+    /// Builds unique filter input using single-field and composite unique selectors.
     /// </summary>
-    private ClassDeclarationSyntax BuildWhereUniqueInput(CharismaSchema schema, ModelDefinition model)
+    private ClassDeclarationSyntax BuildWhereUniqueInput(CharismaSchema schema, ModelDefinition model, IReadOnlyList<CompositeUniqueSelector> compositeSelectors)
     {
         var uniqueNames = new HashSet<string>(StringComparer.Ordinal);
 
@@ -337,8 +348,120 @@ internal sealed class FilterWriter : IWriter
             })
             .ToList();
 
-        return BuildClass($"{model.Name}WhereUniqueInput", props, $"Unique filter for {model.Name} using single-field unique or primary key values.");
+        foreach (var selector in compositeSelectors)
+        {
+            props.Add(BuildProp($"{selector.TypeName}?", selector.PropertyName, "Composite unique selector."));
+        }
+
+        return BuildClass($"{model.Name}WhereUniqueInput", props, $"Unique filter for {model.Name} using single-field or composite unique selectors.");
     }
+
+    /// <summary>
+    /// Builds a strongly-typed composite unique selector class.
+    /// </summary>
+    private ClassDeclarationSyntax BuildCompositeSelectorInputClass(CharismaSchema schema, ModelDefinition model, CompositeUniqueSelector selector)
+    {
+        var props = selector.Fields
+            .Select(name =>
+            {
+                var field = model.GetField(name) ?? throw new InvalidOperationException($"Field '{name}' not found on model '{model.Name}'.");
+                var typeSyntax = MapScalarOrEnumType(schema, field.RawType, nullable: true);
+                return BuildProp(typeSyntax, name);
+            })
+            .ToList();
+
+        return BuildClass(selector.TypeName, props, $"Composite unique selector for {model.Name} on [{string.Join(", ", selector.Fields)}].");
+    }
+
+    /// <summary>
+    /// Collects composite unique selector descriptors for PK/@@unique constraints.
+    /// </summary>
+    private static IReadOnlyList<CompositeUniqueSelector> BuildCompositeUniqueSelectors(CharismaSchema schema, ModelDefinition model)
+    {
+        _ = schema;
+
+        var selectors = new List<CompositeUniqueSelector>();
+        var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var usedPropertyNames = new HashSet<string>(StringComparer.Ordinal);
+
+        if (model.PrimaryKey is { Fields.Count: > 1 } pk)
+        {
+            AddCompositeSelector(model, pk.Fields, explicitName: null, selectors, seenKeys, usedPropertyNames);
+        }
+
+        foreach (var uc in model.UniqueConstraints.Where(u => u.Fields.Count > 1))
+        {
+            AddCompositeSelector(model, uc.Fields, uc.Name, selectors, seenKeys, usedPropertyNames);
+        }
+
+        selectors.Sort(static (a, b) => string.CompareOrdinal(a.PropertyName, b.PropertyName));
+        return selectors;
+    }
+
+    private static void AddCompositeSelector(
+        ModelDefinition model,
+        IReadOnlyList<string> fields,
+        string? explicitName,
+        List<CompositeUniqueSelector> selectors,
+        HashSet<string> seenKeys,
+        HashSet<string> usedPropertyNames)
+    {
+        var key = string.Join("|", fields).ToLowerInvariant();
+        if (!seenKeys.Add(key))
+        {
+            return;
+        }
+
+        var propertyBase = BuildCompositeSelectorPropertyName(fields, explicitName);
+        var propertyName = propertyBase;
+        var suffix = 2;
+        while (!usedPropertyNames.Add(propertyName))
+        {
+            propertyName = $"{propertyBase}{suffix++}";
+        }
+
+        selectors.Add(new CompositeUniqueSelector(propertyName, $"{model.Name}{propertyName}Input", fields));
+    }
+
+    private static string BuildCompositeSelectorPropertyName(IReadOnlyList<string> fields, string? explicitName)
+    {
+        if (!string.IsNullOrWhiteSpace(explicitName))
+        {
+            return $"By{ToPascalIdentifier(explicitName!)}";
+        }
+
+        var joined = string.Join("And", fields.Select(ToPascalIdentifier));
+        return $"By{joined}";
+    }
+
+    private static string ToPascalIdentifier(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return "Key";
+        }
+
+        var parts = raw
+            .Split(new[] { '_', '-', ' ', '.', ':', ';', '/', '\\', ',', '(', ')', '[', ']' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => p.Trim())
+            .Where(p => p.Length > 0)
+            .ToArray();
+
+        if (parts.Length == 0)
+        {
+            return "Key";
+        }
+
+        var pascal = string.Concat(parts.Select(p => char.ToUpperInvariant(p[0]) + p[1..]));
+        if (!char.IsLetter(pascal[0]) && pascal[0] != '_')
+        {
+            pascal = $"K{pascal}";
+        }
+
+        return pascal;
+    }
+
+    private sealed record CompositeUniqueSelector(string PropertyName, string TypeName, IReadOnlyList<string> Fields);
 
     /// <summary>
     /// Builds relation filter (every/some/none/is/isNot) for a target model.

@@ -153,44 +153,51 @@ public sealed partial class PostgresSqlExecutor
 
     private async Task<object?> ExecuteGroupByAsync(QueryModel model, SqlExecutionContext? context, CancellationToken ct)
     {
-        var plan = _planner.Plan(model);
-        if (plan.Kind != SqlPlanKind.QueryMany)
+        try
         {
-            throw new InvalidOperationException($"Planner returned kind '{plan.Kind}' but executor expected '{SqlPlanKind.QueryMany}'.");
+            var plan = _planner.Plan(model);
+            if (plan.Kind != SqlPlanKind.QueryMany)
+            {
+                throw new InvalidOperationException($"Planner returned kind '{plan.Kind}' but executor expected '{SqlPlanKind.QueryMany}'.");
+            }
+
+            var (conn, tx) = ExtractContext(context);
+            var parameters = plan.Parameters.Select(p => new NpgsqlParameter(p.Name, p.Value ?? DBNull.Value)).ToList();
+            var meta = GetModelMetadata(model.ModelName);
+            var resultType = ResolveGroupByResultType(model.ModelName);
+
+            var ownsConnection = conn is null;
+            await using var ownedConn = ownsConnection ? await _connectionProvider.OpenAsync(ct).ConfigureAwait(false) : null;
+            var npgConn = conn ?? ownedConn as NpgsqlConnection;
+            if (npgConn is null)
+            {
+                throw new InvalidOperationException("ConnectionProvider returned a non-Npgsql connection.");
+            }
+
+            var results = new List<object>();
+            await using var cmd = new NpgsqlCommand(plan.CommandText, npgConn)
+            {
+                Transaction = tx
+            };
+            foreach (var p in parameters)
+            {
+                cmd.Parameters.Add(p);
+            }
+
+            await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while (await reader.ReadAsync(ct).ConfigureAwait(false))
+            {
+                var instance = Activator.CreateInstance(resultType) ?? throw new InvalidOperationException($"Failed to create groupBy result instance of '{resultType.FullName}'.");
+                PopulateGroupByResult(meta, instance, reader);
+                results.Add(instance);
+            }
+
+            return results.AsReadOnly();
         }
-
-        var (conn, tx) = ExtractContext(context);
-        var parameters = plan.Parameters.Select(p => new NpgsqlParameter(p.Name, p.Value ?? DBNull.Value)).ToList();
-        var meta = GetModelMetadata(model.ModelName);
-        var resultType = ResolveGroupByResultType(model.ModelName);
-
-        var ownsConnection = conn is null;
-        await using var ownedConn = ownsConnection ? await _connectionProvider.OpenAsync(ct).ConfigureAwait(false) : null;
-        var npgConn = conn ?? ownedConn as NpgsqlConnection;
-        if (npgConn is null)
+        catch (PostgresException ex)
         {
-            throw new InvalidOperationException("ConnectionProvider returned a non-Npgsql connection.");
+            throw MapProviderException(ex, model.ModelName, model.Type.ToString());
         }
-
-        var results = new List<object>();
-        await using var cmd = new NpgsqlCommand(plan.CommandText, npgConn)
-        {
-            Transaction = tx
-        };
-        foreach (var p in parameters)
-        {
-            cmd.Parameters.Add(p);
-        }
-
-        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
-        while (await reader.ReadAsync(ct).ConfigureAwait(false))
-        {
-            var instance = Activator.CreateInstance(resultType) ?? throw new InvalidOperationException($"Failed to create groupBy result instance of '{resultType.FullName}'.");
-            PopulateGroupByResult(meta, instance, reader);
-            results.Add(instance);
-        }
-
-        return results.AsReadOnly();
     }
 
     private async Task<IReadOnlyList<T>> ExecutePlannedQueryManyTypedAsync<T>(QueryModel query, SqlExecutionContext? context, CancellationToken ct)
@@ -214,11 +221,26 @@ public sealed partial class PostgresSqlExecutor
             var distinctResults = ApplyDistinctAndPaging(meta, plan, results);
             return CastToReadOnlyList<T>(distinctResults, query);
         }
-        catch (PostgresException)
+        catch (PostgresException ex)
         {
             Console.Error.WriteLine($"SQL failed ({query.Type} {query.ModelName}): {plan.CommandText}");
-            throw;
+            throw MapProviderException(ex, query.ModelName, query.Type.ToString());
         }
+    }
+
+    private static Exception MapProviderException(PostgresException ex, string modelName, string operation)
+    {
+        return ex.SqlState switch
+        {
+            PostgresErrorCodes.UniqueViolation => new UniqueConstraintViolationException(modelName, operation, ex.ConstraintName, ex),
+            PostgresErrorCodes.ForeignKeyViolation => new ForeignKeyViolationException(modelName, operation, ex.ConstraintName, ex),
+            _ => new DatabaseExecutionException(
+                modelName,
+                operation,
+                $"Database error while executing '{operation}' on model '{modelName}' (SQLSTATE {ex.SqlState}). {ex.MessageText}",
+                ex.SqlState,
+                ex)
+        };
     }
 
     private static void EnsurePlanKind(SqlPlan plan, SqlPlanKind expected)

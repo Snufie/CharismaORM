@@ -21,10 +21,13 @@ internal sealed class DropSafetyChecker
 
     public async Task<bool> IsTableEmptyAsync(string tableName, CancellationToken cancellationToken = default)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
+
         await using var conn = new NpgsqlConnection(_connectionString);
         await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
 
-        await using var cmd = new NpgsqlCommand($"select count(*) from \"{tableName}\"", conn);
+        // Table name cannot be parameterized in PostgreSQL, so quote it as an identifier.
+        await using var cmd = new NpgsqlCommand($"select count(*) from {Introspection.Push.Postgres.PostgresSchemaPusherHelpers.QuoteIdentifier(tableName)}", conn);
         var countObj = await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
         var count = Convert.ToInt64(countObj);
         return count == 0;
@@ -32,16 +35,23 @@ internal sealed class DropSafetyChecker
 
     public async Task<bool> ColumnHasNullsAsync(string tableName, string columnName, CancellationToken cancellationToken = default)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(columnName);
+
         await using var conn = new NpgsqlConnection(_connectionString);
         await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
 
-        await using var cmd = new NpgsqlCommand($"select exists(select 1 from \"{tableName}\" where \"{columnName}\" is null limit 1)", conn);
+        var quotedTable = Introspection.Push.Postgres.PostgresSchemaPusherHelpers.QuoteIdentifier(tableName);
+        var quotedColumn = Introspection.Push.Postgres.PostgresSchemaPusherHelpers.QuoteIdentifier(columnName);
+        await using var cmd = new NpgsqlCommand($"select exists(select 1 from {quotedTable} where {quotedColumn} is null limit 1)", conn);
         var existsObj = await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
         return existsObj is bool b && b;
     }
 
     public async Task<bool> TableHasReferencingRowsAsync(string tableName, CancellationToken cancellationToken = default)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
+
         await using var conn = new NpgsqlConnection(_connectionString);
         await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
 
@@ -70,9 +80,10 @@ internal sealed class DropSafetyChecker
 
         foreach (var child in childRefs)
         {
-            var predicates = child.Columns.Select(c => $"\"{c}\" is not null");
+            var predicates = child.Columns.Select(c => $"{Introspection.Push.Postgres.PostgresSchemaPusherHelpers.QuoteIdentifier(c)} is not null");
             var where = string.Join(" or ", predicates);
-            var existsSql = $"select exists(select 1 from \"{child.Table}\" where {where} limit 1)";
+            var quotedChildTable = Introspection.Push.Postgres.PostgresSchemaPusherHelpers.QuoteIdentifier(child.Table);
+            var existsSql = $"select exists(select 1 from {quotedChildTable} where {where} limit 1)";
             await using var cmd = new NpgsqlCommand(existsSql, conn);
             var existsObj = await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
             if (existsObj is bool b && b)
@@ -86,6 +97,9 @@ internal sealed class DropSafetyChecker
 
     public async Task<bool> ColumnHasInboundReferencesAsync(string tableName, string columnName, CancellationToken cancellationToken = default)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(columnName);
+
         await using var conn = new NpgsqlConnection(_connectionString);
         await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
 
@@ -115,9 +129,10 @@ internal sealed class DropSafetyChecker
 
         foreach (var child in childRefs)
         {
-            var predicates = child.Columns.Select(c => $"\"{c}\" is not null");
+            var predicates = child.Columns.Select(c => $"{Introspection.Push.Postgres.PostgresSchemaPusherHelpers.QuoteIdentifier(c)} is not null");
             var where = string.Join(" or ", predicates);
-            var existsSql = $"select exists(select 1 from \"{child.Table}\" where {where} limit 1)";
+            var quotedChildTable = Introspection.Push.Postgres.PostgresSchemaPusherHelpers.QuoteIdentifier(child.Table);
+            var existsSql = $"select exists(select 1 from {quotedChildTable} where {where} limit 1)";
             await using var cmd = new NpgsqlCommand(existsSql, conn);
             var existsObj = await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
             if (existsObj is bool b && b)
@@ -131,6 +146,8 @@ internal sealed class DropSafetyChecker
 
     public async Task<bool> TableHasInboundForeignKeysAsync(string tableName, CancellationToken cancellationToken = default)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
+
         await using var conn = new NpgsqlConnection(_connectionString);
         await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
 
@@ -148,6 +165,9 @@ internal sealed class DropSafetyChecker
 
     public async Task<bool> ColumnHasInboundForeignKeysAsync(string tableName, string columnName, CancellationToken cancellationToken = default)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(columnName);
+
         await using var conn = new NpgsqlConnection(_connectionString);
         await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
 

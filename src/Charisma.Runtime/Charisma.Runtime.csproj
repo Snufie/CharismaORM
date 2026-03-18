@@ -10,6 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Charisma.Schema\Charisma.Schema.csproj" />
     <ProjectReference Include="..\Charisma.QueryEngine\Charisma.QueryEngine.csproj" />
+    <ProjectReference Include="..\Charisma.Migration\Charisma.Migration.csproj" />
   </ItemGroup>
 
   <ItemGroup>

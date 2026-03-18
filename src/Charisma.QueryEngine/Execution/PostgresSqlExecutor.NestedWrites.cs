@@ -14,7 +14,7 @@ namespace Charisma.QueryEngine.Execution;
 
 public sealed partial class PostgresSqlExecutor
 {
-    private static bool FkAllowsNullOnLocal(ModelMetadata owningMeta, ForeignKeyMetadata fk)
+    private bool FkAllowsNullOnLocal(ModelMetadata owningMeta, ForeignKeyMetadata fk)
     {
         foreach (var localField in fk.LocalFields)
         {
@@ -28,7 +28,7 @@ public sealed partial class PostgresSqlExecutor
         return true;
     }
 
-    private static (Dictionary<string, object?> Values, bool HasNull) ExtractForeignKeyValuesFromParent(ModelMetadata parentMeta, ForeignKeyMetadata fk, object parentInstance)
+    private (Dictionary<string, object?> Values, bool HasNull) ExtractForeignKeyValuesFromParent(ModelMetadata parentMeta, ForeignKeyMetadata fk, object parentInstance)
     {
         var dict = new Dictionary<string, object?>(StringComparer.Ordinal);
         var parentType = parentInstance.GetType();
@@ -51,7 +51,7 @@ public sealed partial class PostgresSqlExecutor
         return (dict, hasNull);
     }
 
-    private static void AppendParentPkPredicate(ModelMetadata parentMeta, IReadOnlyDictionary<string, object?> parentPk, string alias, ParameterContext pctx, List<NpgsqlParameter> parameters, List<string> predicates)
+    private void AppendParentPkPredicate(ModelMetadata parentMeta, IReadOnlyDictionary<string, object?> parentPk, string alias, ParameterContext pctx, List<NpgsqlParameter> parameters, List<string> predicates)
     {
         if (parentMeta.PrimaryKey is null)
         {
@@ -72,7 +72,7 @@ public sealed partial class PostgresSqlExecutor
         }
     }
 
-    private static void AppendParentFkAssignmentsFromChildPk(ForeignKeyMetadata fk, IReadOnlyDictionary<string, object?> childPk, ParameterContext pctx, List<NpgsqlParameter> parameters, List<string> assignments, bool setNull = false)
+    private void AppendParentFkAssignmentsFromChildPk(ForeignKeyMetadata fk, IReadOnlyDictionary<string, object?> childPk, ParameterContext pctx, List<NpgsqlParameter> parameters, List<string> assignments, bool setNull = false)
     {
         for (var i = 0; i < fk.LocalFields.Count; i++)
         {
@@ -94,7 +94,7 @@ public sealed partial class PostgresSqlExecutor
         }
     }
 
-    private static void AppendChildPkPredicate(ForeignKeyMetadata fk, IReadOnlyDictionary<string, object?> childPk, string alias, ParameterContext pctx, List<NpgsqlParameter> parameters, List<string> predicates)
+    private void AppendChildPkPredicate(ForeignKeyMetadata fk, IReadOnlyDictionary<string, object?> childPk, string alias, ParameterContext pctx, List<NpgsqlParameter> parameters, List<string> predicates)
     {
         for (var i = 0; i < fk.PrincipalFields.Count; i++)
         {
@@ -134,7 +134,7 @@ public sealed partial class PostgresSqlExecutor
         }
     }
 
-    private static void ApplyParentForeignKeyLocally(ModelMetadata parentMeta, ForeignKeyMetadata fk, ModelMetadata childMeta, object parentInstance, IReadOnlyDictionary<string, object?> childPk, bool setNull = false)
+    private void ApplyParentForeignKeyLocally(ModelMetadata parentMeta, ForeignKeyMetadata fk, ModelMetadata childMeta, object parentInstance, IReadOnlyDictionary<string, object?> childPk, bool setNull = false)
     {
         var principalFields = fk.PrincipalFields.Count > 0
             ? fk.PrincipalFields
@@ -247,7 +247,7 @@ public sealed partial class PostgresSqlExecutor
         return;
     }
 
-    private static void ClearParentRelation(object parentInstance, FieldMetadata relationField)
+    private void ClearParentRelation(object parentInstance, FieldMetadata relationField)
     {
         var prop = parentInstance.GetType().GetProperty(relationField.Name, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
         if (prop?.CanWrite == true)
@@ -1253,7 +1253,7 @@ public sealed partial class PostgresSqlExecutor
         }
     }
 
-    private static Dictionary<string, object?> BuildFkOverrideValues(ForeignKeyMetadata fk, IReadOnlyDictionary<string, object?> parentPk)
+    private Dictionary<string, object?> BuildFkOverrideValues(ForeignKeyMetadata fk, IReadOnlyDictionary<string, object?> parentPk)
     {
         var overrides = new Dictionary<string, object?>(StringComparer.Ordinal);
         for (int i = 0; i < fk.LocalFields.Count; i++)
@@ -1314,12 +1314,12 @@ public sealed partial class PostgresSqlExecutor
         }
     }
 
-    private static bool GetBool(object payload, string propName)
+    private bool GetBool(object payload, string propName)
     {
         return payload.GetType().GetProperty(propName, BindingFlags.Public | BindingFlags.Instance)?.GetValue(payload) as bool? == true;
     }
 
-    private static System.Collections.IEnumerable? GetEnumerable(object payload, string propName)
+    private System.Collections.IEnumerable? GetEnumerable(object payload, string propName)
     {
         return payload.GetType().GetProperty(propName, BindingFlags.Public | BindingFlags.Instance)?.GetValue(payload) as System.Collections.IEnumerable;
     }

@@ -25,7 +25,7 @@ public sealed partial class PostgresSqlExecutor : ISqlExecutor, IAsyncDisposable
     private readonly PostgresSqlPlanner _planner;
     private readonly Assembly _generatedAssembly;
     private readonly string _rootNamespace;
-    private static bool _preserveIdentifierCasing;
+    private readonly bool _preserveIdentifierCasing;
     private readonly int _maxNestingDepth;
     private readonly IReadOnlyDictionary<string, object?>? _globalOmit;
 

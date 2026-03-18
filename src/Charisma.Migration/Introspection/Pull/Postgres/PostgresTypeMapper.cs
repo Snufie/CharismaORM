@@ -138,6 +138,12 @@ internal static class PostgresTypeMapper
             return DefaultValueKind.UuidV4;
         }
 
+        if (def.Contains("uuidv7", StringComparison.OrdinalIgnoreCase)
+            || def.Contains("uuid_generate_v7", StringComparison.OrdinalIgnoreCase))
+        {
+            return DefaultValueKind.UuidV7;
+        }
+
         if (def.Contains("gen_random_uuid", StringComparison.OrdinalIgnoreCase))
         {
             return DefaultValueKind.UuidV4;
@@ -184,7 +190,7 @@ internal static class PostgresTypeMapper
         {
             DefaultValueKind.Autoincrement => "@default(autoincrement())",
             DefaultValueKind.UuidV4 => "@default(uuid())",
-            DefaultValueKind.UuidV7 => "@default(uuid())",
+            DefaultValueKind.UuidV7 => "@default(uuidv7())",
             DefaultValueKind.Now => "@default(now())",
             DefaultValueKind.Json when value is not null => $"@default({value})",
             DefaultValueKind.Static when value is not null => $"@default(\"{value}\")",

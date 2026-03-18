@@ -41,7 +41,7 @@ namespace Charisma.Schema
 
         private static void AppendDatasources(CharismaSchema schema, StringBuilder sb)
         {
-            foreach (var datasource in schema.Datasources)
+            foreach (var datasource in schema.Datasources.OrderBy(d => d.Name, StringComparer.Ordinal))
             {
                 sb.Append("datasource ");
                 sb.Append(datasource.Name);
@@ -70,7 +70,7 @@ namespace Charisma.Schema
 
         private static void AppendGenerators(CharismaSchema schema, StringBuilder sb)
         {
-            foreach (var generator in schema.Generators)
+            foreach (var generator in schema.Generators.OrderBy(g => g.Name, StringComparer.Ordinal))
             {
                 sb.Append("generator ");
                 sb.Append(generator.Name);
@@ -121,8 +121,8 @@ namespace Charisma.Schema
                     .OrderBy(f => f.Name, StringComparer.Ordinal)
                     .ToList();
 
-                var maxName = fields.Max(f => f.Name.Length);
-                var maxType = fields.Max(f => NormalizeFieldType(f).Length);
+                var maxName = fields.Count == 0 ? 0 : fields.Max(f => f.Name.Length);
+                var maxType = fields.Count == 0 ? 0 : fields.Max(f => NormalizeFieldType(f).Length);
 
                 foreach (var field in fields)
                 {

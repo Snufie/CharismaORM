@@ -15,7 +15,7 @@ namespace Charisma.QueryEngine.Planning;
 public sealed class PostgresSqlPlanner : ISqlPlanner
 {
     private readonly IReadOnlyDictionary<string, ModelMetadata> _metadata;
-    private static bool _preserveIdentifierCasing;
+    private readonly bool _preserveIdentifierCasing;
     private readonly int _maxNestingDepth;
     private readonly IReadOnlyDictionary<string, object?>? _globalOmit;
 
@@ -83,7 +83,7 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
         return new SqlPlan(SqlPlanKind.QuerySingle, sql.ToString(), parameters, meta, includeRoot);
     }
 
-    private static void AppendAggregateSelectors(List<string> selectFragments, ModelMetadata meta, object? selector, string prefix, bool numericOnly, string tableAlias)
+    private void AppendAggregateSelectors(List<string> selectFragments, ModelMetadata meta, object? selector, string prefix, bool numericOnly, string tableAlias)
     {
         if (selector is null)
         {
@@ -117,7 +117,7 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
         }
     }
 
-    private static bool IsNumericClrType(string clrType)
+    private bool IsNumericClrType(string clrType)
     {
         return clrType.Equals("int", StringComparison.OrdinalIgnoreCase)
             || clrType.Equals("double", StringComparison.OrdinalIgnoreCase)
@@ -576,18 +576,18 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
         throw new InvalidOperationException($"Model metadata for '{name}' was not found.");
     }
 
-    private static object? GetProperty(object obj, string name)
+    private object? GetProperty(object obj, string name)
     {
         return obj.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase)?.GetValue(obj);
     }
 
-    private static object GetRequiredProperty(object obj, string name)
+    private object GetRequiredProperty(object obj, string name)
     {
         var value = GetProperty(obj, name);
         return value ?? throw new InvalidOperationException($"Required property '{name}' was not provided on args object of type '{obj.GetType().Name}'.");
     }
 
-    private static void EnsureSelectIncludeOmitExclusivity(object? select, object? include, object? omit)
+    private void EnsureSelectIncludeOmitExclusivity(object? select, object? include, object? omit)
     {
         if ((select is not null && include is not null) || (select is not null && omit is not null) || (include is not null && omit is not null))
         {
@@ -595,7 +595,7 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
         }
     }
 
-    private static IReadOnlyList<string> BuildSelectColumns(ModelMetadata meta, object? selectObj, object? omitObj, bool includePrimaryKey = false)
+    private IReadOnlyList<string> BuildSelectColumns(ModelMetadata meta, object? selectObj, object? omitObj, bool includePrimaryKey = false)
     {
         var selected = new List<string>();
         if (selectObj is null && omitObj is null)
@@ -735,7 +735,7 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
         return merged;
     }
 
-    private static Dictionary<string, bool?>? ToOmitMap(object? omitObj)
+    private Dictionary<string, bool?>? ToOmitMap(object? omitObj)
     {
         if (omitObj is null)
         {
@@ -785,7 +785,7 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
         return result.Count == 0 ? null : result;
     }
 
-    private static List<string> BuildDistinctColumns(ModelMetadata meta, System.Collections.IEnumerable? distinct)
+    private List<string> BuildDistinctColumns(ModelMetadata meta, System.Collections.IEnumerable? distinct)
     {
         var columns = new List<string>();
         if (distinct is null)
@@ -868,7 +868,7 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
         return plans;
     }
 
-    private static bool TryGetIncludeValue(object includeObj, string relationName, out object? value)
+    private bool TryGetIncludeValue(object includeObj, string relationName, out object? value)
     {
         var prop = includeObj.GetType().GetProperty(relationName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
         if (prop is not null)
@@ -942,7 +942,7 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
         throw new NotSupportedException($"Could not resolve relation mapping for '{relationField.Name}' between '{parentMeta.Name}' and '{childMeta.Name}'.");
     }
 
-    private static void AppendSelectColumns(List<string> fragments, ModelMetadata meta, IReadOnlyList<string> columns, string alias, string prefix)
+    private void AppendSelectColumns(List<string> fragments, ModelMetadata meta, IReadOnlyList<string> columns, string alias, string prefix)
     {
         foreach (var column in columns)
         {
@@ -960,7 +960,7 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
         }
     }
 
-    private static IReadOnlyList<string> BuildJoinFragments(IReadOnlyList<IncludePlan> includes)
+    private IReadOnlyList<string> BuildJoinFragments(IReadOnlyList<IncludePlan> includes)
     {
         var joins = new List<string>();
         foreach (var include in includes)
@@ -974,7 +974,7 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
         return joins;
     }
 
-    private static bool TryGetWhereFieldValue(object whereObj, string fieldName, out object? value)
+    private bool TryGetWhereFieldValue(object whereObj, string fieldName, out object? value)
     {
         var prop = whereObj.GetType().GetProperty(fieldName, BindingFlags.Public | BindingFlags.Instance);
         if (prop is not null)
@@ -1009,42 +1009,180 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
         return false;
     }
 
-    private static string BuildWhereUnique(ModelMetadata meta, object whereObj, List<SqlParameterValue> parameters, ParameterContext paramCtx, string tableAlias)
+    private string BuildWhereUnique(ModelMetadata meta, object whereObj, List<SqlParameterValue> parameters, ParameterContext paramCtx, string tableAlias)
     {
         ArgumentNullException.ThrowIfNull(meta);
         ArgumentNullException.ThrowIfNull(whereObj);
         ArgumentNullException.ThrowIfNull(paramCtx);
 
-        var clauses = new List<string>();
-        foreach (var field in meta.Fields.Where(f => f.Kind == FieldKind.Scalar))
+        var scalarByName = meta.Fields
+            .Where(f => f.Kind == FieldKind.Scalar)
+            .ToDictionary(f => f.Name, f => f, StringComparer.OrdinalIgnoreCase);
+
+        var candidates = new Dictionary<string, UniqueSelectorCandidate>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var key in EnumerateUniqueFieldSets(meta))
         {
-            if (!TryGetWhereFieldValue(whereObj, field.Name, out var value))
+            if (TryExtractUniqueValues(whereObj, scalarByName, key.Fields, out var values))
             {
-                continue;
-            }
-            if (value is null)
-            {
-                continue;
+                AddUniqueCandidate(candidates, new UniqueSelectorCandidate(key, values));
             }
 
-            // Skip default value-type placeholders (e.g., default Guid/DateTime) so optional fields
-            // not explicitly set on WhereUnique inputs do not become unintended predicates.
-            if (IsDefaultValue(value))
+            if (key.Fields.Count > 1)
             {
-                continue;
-            }
+                var selectorName = BuildCompositeSelectorPropertyName(key.Fields, key.Name);
+                if (!TryGetWhereFieldValue(whereObj, selectorName, out var nestedSelector) || nestedSelector is null)
+                {
+                    continue;
+                }
 
-            var paramName = paramCtx.Next();
-            clauses.Add($"\"{tableAlias}\".{QuoteIdentifier(field.Name)} = {paramName}");
-            parameters.Add(new SqlParameterValue(paramName, value));
+                if (!TryExtractUniqueValues(nestedSelector, scalarByName, key.Fields, out var nestedValues))
+                {
+                    throw new InvalidOperationException($"Composite unique selector '{selectorName}' on '{meta.Name}' must provide all fields: {string.Join(", ", key.Fields)}.");
+                }
+
+                AddUniqueCandidate(candidates, new UniqueSelectorCandidate(key, nestedValues));
+            }
         }
 
-        if (clauses.Count == 0)
+        if (candidates.Count == 0)
         {
-            throw new InvalidOperationException($"Where predicate for '{meta.Name}' produced no filters; refusing to generate a non-unique plan.");
+            throw new InvalidOperationException($"WhereUnique for '{meta.Name}' must specify exactly one unique selector.");
+        }
+
+        if (candidates.Count > 1)
+        {
+            var selectorNames = string.Join(", ", candidates.Values.Select(c => c.Key.DisplayName));
+            throw new InvalidOperationException($"WhereUnique for '{meta.Name}' is ambiguous; provide only one selector. Provided: {selectorNames}.");
+        }
+
+        var selected = candidates.Values.Single();
+        var clauses = new List<string>(selected.Values.Count);
+        foreach (var pair in selected.Values)
+        {
+            var field = scalarByName[pair.Key];
+            var paramName = paramCtx.Next();
+            clauses.Add($"\"{tableAlias}\".{QuoteIdentifier(field.Name)} = {paramName}");
+            parameters.Add(new SqlParameterValue(paramName, pair.Value));
         }
 
         return string.Join(" AND ", clauses);
+    }
+
+    private static void AddUniqueCandidate(IDictionary<string, UniqueSelectorCandidate> candidates, UniqueSelectorCandidate candidate)
+    {
+        var key = candidate.Key.Key;
+        if (!candidates.TryGetValue(key, out var existing))
+        {
+            candidates[key] = candidate;
+            return;
+        }
+
+        foreach (var pair in candidate.Values)
+        {
+            if (!existing.Values.TryGetValue(pair.Key, out var existingValue))
+            {
+                throw new InvalidOperationException($"Unique selector '{candidate.Key.DisplayName}' was provided with inconsistent field sets.");
+            }
+
+            if (!Equals(existingValue, pair.Value))
+            {
+                throw new InvalidOperationException($"Unique selector '{candidate.Key.DisplayName}' was provided multiple times with different values for field '{pair.Key}'.");
+            }
+        }
+    }
+
+    private bool TryExtractUniqueValues(
+        object source,
+        IReadOnlyDictionary<string, FieldMetadata> scalarByName,
+        IReadOnlyList<string> fields,
+        out Dictionary<string, object> values)
+    {
+        values = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        foreach (var fieldName in fields)
+        {
+            if (!scalarByName.ContainsKey(fieldName))
+            {
+                values.Clear();
+                return false;
+            }
+
+            if (!TryGetWhereFieldValue(source, fieldName, out var value) || value is null || IsDefaultValue(value))
+            {
+                values.Clear();
+                return false;
+            }
+
+            values[fieldName] = value;
+        }
+
+        return values.Count == fields.Count;
+    }
+
+    private static IReadOnlyList<UniqueKeyDescriptor> EnumerateUniqueFieldSets(ModelMetadata meta)
+    {
+        var result = new List<UniqueKeyDescriptor>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (meta.PrimaryKey is { Fields.Count: > 0 } pk)
+        {
+            TryAddUniqueDescriptor(result, seen, pk.Fields, name: null);
+        }
+
+        foreach (var unique in meta.UniqueConstraints.Where(u => u.Fields.Count > 0))
+        {
+            TryAddUniqueDescriptor(result, seen, unique.Fields, unique.Name);
+        }
+
+        return result;
+    }
+
+    private static void TryAddUniqueDescriptor(List<UniqueKeyDescriptor> result, HashSet<string> seen, IReadOnlyList<string> fields, string? name)
+    {
+        var key = string.Join("|", fields).ToLowerInvariant();
+        if (!seen.Add(key))
+        {
+            return;
+        }
+
+        result.Add(new UniqueKeyDescriptor(fields, name));
+    }
+
+    private static string BuildCompositeSelectorPropertyName(IReadOnlyList<string> fields, string? explicitName)
+    {
+        if (!string.IsNullOrWhiteSpace(explicitName))
+        {
+            return $"By{ToPascalIdentifier(explicitName!)}";
+        }
+
+        return $"By{string.Join("And", fields.Select(ToPascalIdentifier))}";
+    }
+
+    private static string ToPascalIdentifier(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return "Key";
+        }
+
+        var parts = raw
+            .Split(new[] { '_', '-', ' ', '.', ':', ';', '/', '\\', ',', '(', ')', '[', ']' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => p.Trim())
+            .Where(p => p.Length > 0)
+            .ToArray();
+
+        if (parts.Length == 0)
+        {
+            return "Key";
+        }
+
+        var pascal = string.Concat(parts.Select(p => char.ToUpperInvariant(p[0]) + p[1..]));
+        if (!char.IsLetter(pascal[0]) && pascal[0] != '_')
+        {
+            pascal = $"K{pascal}";
+        }
+
+        return pascal;
     }
 
     private string BuildWhere(ModelMetadata meta, object? whereObj, List<SqlParameterValue> parameters, ParameterContext paramCtx, string tableAlias, ref AliasContext aliasCtx)
@@ -1172,7 +1310,7 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
         return string.Join(" AND ", clauses);
     }
 
-    private static IEnumerable<object> NormalizeLogicalConditions(object? value)
+    private IEnumerable<object> NormalizeLogicalConditions(object? value)
     {
         if (value is null)
         {
@@ -1246,7 +1384,7 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
         return string.Empty;
     }
 
-    private static string BuildExistsClause(ModelMetadata childMeta, RelationMapping mapping, string parentAlias, string childAlias, string childWhere, bool negate, bool rawCondition = false)
+    private string BuildExistsClause(ModelMetadata childMeta, RelationMapping mapping, string parentAlias, string childAlias, string childWhere, bool negate, bool rawCondition = false)
     {
         var joinCondition = BuildJoinCondition(mapping, parentAlias, childAlias);
         var condition = string.IsNullOrWhiteSpace(childWhere)
@@ -1257,13 +1395,13 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
         return negate ? $"NOT EXISTS ({subquery})" : $"EXISTS ({subquery})";
     }
 
-    private static string BuildJoinCondition(RelationMapping mapping, string parentAlias, string childAlias)
+    private string BuildJoinCondition(RelationMapping mapping, string parentAlias, string childAlias)
     {
         var comparisons = mapping.ParentColumns.Zip(mapping.ChildColumns, (p, c) => $"\"{parentAlias}\".{QuoteIdentifier(p)} = \"{childAlias}\".{QuoteIdentifier(c)}");
         return string.Join(" AND ", comparisons);
     }
 
-    private static string BuildScalarFilterClause(FieldMetadata field, object filterValue, List<SqlParameterValue> parameters, ParameterContext paramCtx, string tableAlias)
+    private string BuildScalarFilterClause(FieldMetadata field, object filterValue, List<SqlParameterValue> parameters, ParameterContext paramCtx, string tableAlias)
     {
         if (string.Equals(field.ClrType, "Json", StringComparison.Ordinal))
         {
@@ -1383,7 +1521,7 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
         return string.Join(" AND ", clauses);
     }
 
-    private static string BuildJsonFilterClause(FieldMetadata field, object filterValue, List<SqlParameterValue> parameters, ParameterContext paramCtx, string tableAlias)
+    private string BuildJsonFilterClause(FieldMetadata field, object filterValue, List<SqlParameterValue> parameters, ParameterContext paramCtx, string tableAlias)
     {
         var column = $"\"{tableAlias}\".{QuoteIdentifier(field.Name)}";
 
@@ -1463,7 +1601,7 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
         return string.Join(" AND ", clauses);
     }
 
-    private static string BuildJsonPathFilterClause(string column, object pathFilter, List<SqlParameterValue> parameters, ParameterContext paramCtx)
+    private string BuildJsonPathFilterClause(string column, object pathFilter, List<SqlParameterValue> parameters, ParameterContext paramCtx)
     {
         var type = pathFilter.GetType();
 
@@ -1535,7 +1673,7 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
         return string.Join(" AND ", clauses);
     }
 
-    private static string BuildJsonArrayFilterClause(string jsonExpr, object arrayFilter, List<SqlParameterValue> parameters, ParameterContext paramCtx)
+    private string BuildJsonArrayFilterClause(string jsonExpr, object arrayFilter, List<SqlParameterValue> parameters, ParameterContext paramCtx)
     {
         var type = arrayFilter.GetType();
         var clauses = new List<string>();
@@ -1622,7 +1760,7 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
         return string.Join(" AND ", clauses);
     }
 
-    private static string BuildJsonStringFilterClause(string column, IReadOnlyList<string> segments, object stringFilter, List<SqlParameterValue> parameters, ParameterContext paramCtx)
+    private string BuildJsonStringFilterClause(string column, IReadOnlyList<string> segments, object stringFilter, List<SqlParameterValue> parameters, ParameterContext paramCtx)
     {
         var textExpr = BuildJsonTextExpression(column, segments);
         var clauses = new List<string>();
@@ -1684,7 +1822,7 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
         return string.Join(" AND ", clauses);
     }
 
-    private static string BuildJsonPathExpression(string column, IReadOnlyList<string> segments)
+    private string BuildJsonPathExpression(string column, IReadOnlyList<string> segments)
     {
         if (segments.Count == 0)
         {
@@ -1694,13 +1832,13 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
         return $"{column} #> '{BuildPathLiteral(segments)}'";
     }
 
-    private static string BuildJsonTextExpression(string column, IReadOnlyList<string> segments)
+    private string BuildJsonTextExpression(string column, IReadOnlyList<string> segments)
     {
         var literal = BuildPathLiteral(segments);
         return $"{column} #>> '{literal}'";
     }
 
-    private static string BuildPathLiteral(IReadOnlyList<string> segments)
+    private string BuildPathLiteral(IReadOnlyList<string> segments)
     {
         if (segments.Count == 0)
         {
@@ -1711,13 +1849,13 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
         return "{" + string.Join(",", escaped) + "}";
     }
 
-    private static string WrapArrayPayload(object? value)
+    private string WrapArrayPayload(object? value)
     {
         var raw = value?.ToString() ?? "null";
         return "[" + raw + "]";
     }
 
-    private static string BuildArrayPayload(System.Collections.IEnumerable values)
+    private string BuildArrayPayload(System.Collections.IEnumerable values)
     {
         var parts = new List<string>();
         foreach (var val in values)
@@ -1782,13 +1920,13 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
 
     }
 
-    private static string ResolveSortDirection(object value)
+    private string ResolveSortDirection(object value)
     {
         var order = value.ToString();
         return string.Equals(order, "Desc", StringComparison.OrdinalIgnoreCase) ? "DESC" : "ASC";
     }
 
-    private static void AppendStableTieBreaker(ModelMetadata meta, string tableAlias, List<OrderTerm> terms)
+    private void AppendStableTieBreaker(ModelMetadata meta, string tableAlias, List<OrderTerm> terms)
     {
         if (meta.PrimaryKey is null || meta.PrimaryKey.Fields.Count == 0)
         {
@@ -1808,12 +1946,12 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
         }
     }
 
-    private static bool IsSimpleValue(object value)
+    private bool IsSimpleValue(object value)
     {
         return value is string || value.GetType().IsValueType || value is Guid;
     }
 
-    private static bool IsDefaultValue(object value)
+    private bool IsDefaultValue(object value)
     {
         var type = value.GetType();
         if (!type.IsValueType)
@@ -1824,12 +1962,12 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
         return Equals(value, Activator.CreateInstance(type));
     }
 
-    private static List<OrderTerm> InvertOrderTerms(List<OrderTerm> terms)
+    private List<OrderTerm> InvertOrderTerms(List<OrderTerm> terms)
     {
         return terms.Select(t => new OrderTerm(t.Expression, t.Direction.Equals("DESC", StringComparison.OrdinalIgnoreCase) ? "ASC" : "DESC")).ToList();
     }
 
-    private static string BuildOrderSql(List<OrderTerm> terms, ModelMetadata meta, string tableAlias, bool addTieBreaker = true)
+    private string BuildOrderSql(List<OrderTerm> terms, ModelMetadata meta, string tableAlias, bool addTieBreaker = true)
     {
         if (terms.Count == 0)
         {
@@ -1841,7 +1979,7 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
         return terms.Count == 0 ? string.Empty : string.Join(", ", terms.Select(t => $"{t.Expression} {t.Direction}"));
     }
 
-    private static string BuildCursorPredicate(ModelMetadata meta, object? cursorObj, List<OrderTerm> orderTerms, string tableAlias, List<SqlParameterValue> parameters, ParameterContext paramCtx)
+    private string BuildCursorPredicate(ModelMetadata meta, object? cursorObj, List<OrderTerm> orderTerms, string tableAlias, List<SqlParameterValue> parameters, ParameterContext paramCtx)
     {
         if (cursorObj is null)
         {
@@ -1853,31 +1991,83 @@ public sealed class PostgresSqlPlanner : ISqlPlanner
             throw new InvalidOperationException($"Cursor pagination requires a primary key on '{meta.Name}'.");
         }
 
-        // Only support single-field cursor for now.
-        var pkField = meta.PrimaryKey.Fields[0];
-        var prop = cursorObj.GetType().GetProperty(pkField, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
-        var value = prop?.GetValue(cursorObj);
-        if (value is null)
+        var scalarByName = meta.Fields
+            .Where(f => f.Kind == FieldKind.Scalar)
+            .ToDictionary(f => f.Name, f => f, StringComparer.OrdinalIgnoreCase);
+
+        Dictionary<string, object>? pkValues = null;
+        if (TryExtractUniqueValues(cursorObj, scalarByName, meta.PrimaryKey.Fields, out var topLevelPkValues))
+        {
+            pkValues = topLevelPkValues;
+        }
+        else
+        {
+            var selectorName = BuildCompositeSelectorPropertyName(meta.PrimaryKey.Fields, explicitName: null);
+            if (meta.PrimaryKey.Fields.Count > 1
+                && TryGetWhereFieldValue(cursorObj, selectorName, out var nestedSelector)
+                && nestedSelector is not null
+                && TryExtractUniqueValues(nestedSelector, scalarByName, meta.PrimaryKey.Fields, out var nestedPkValues))
+            {
+                pkValues = nestedPkValues;
+            }
+        }
+
+        if (pkValues is null)
         {
             return string.Empty;
         }
 
-        var direction = orderTerms.FirstOrDefault()?.Direction ?? "ASC";
-        var comparison = direction.Equals("DESC", StringComparison.OrdinalIgnoreCase) ? "<" : ">";
-        var paramName = paramCtx.Next();
-        parameters.Add(new SqlParameterValue(paramName, value));
-        return $"\"{tableAlias}\".{QuoteIdentifier(pkField)} {comparison} {paramName}";
+        var predicates = new List<string>(meta.PrimaryKey.Fields.Count);
+        for (int i = 0; i < meta.PrimaryKey.Fields.Count; i++)
+        {
+            var conjunction = new List<string>(i + 1);
+
+            for (int j = 0; j < i; j++)
+            {
+                var eqField = meta.PrimaryKey.Fields[j];
+                var eqExpr = $"\"{tableAlias}\".{QuoteIdentifier(eqField)}";
+                var eqParam = paramCtx.Next();
+                parameters.Add(new SqlParameterValue(eqParam, pkValues[eqField]));
+                conjunction.Add($"{eqExpr} = {eqParam}");
+            }
+
+            var fieldName = meta.PrimaryKey.Fields[i];
+            var expr = $"\"{tableAlias}\".{QuoteIdentifier(fieldName)}";
+            var direction = orderTerms
+                .FirstOrDefault(t => string.Equals(t.Expression, expr, StringComparison.OrdinalIgnoreCase))
+                ?.Direction ?? "ASC";
+            var comparison = direction.Equals("DESC", StringComparison.OrdinalIgnoreCase) ? "<" : ">";
+
+            var cmpParam = paramCtx.Next();
+            parameters.Add(new SqlParameterValue(cmpParam, pkValues[fieldName]));
+            conjunction.Add($"{expr} {comparison} {cmpParam}");
+
+            predicates.Add($"( {string.Join(" AND ", conjunction)} )");
+        }
+
+        return predicates.Count == 1 ? predicates[0] : $"( {string.Join(" OR ", predicates)} )";
     }
 
-    private static string QuoteIdentifier(string identifier)
+    private string QuoteIdentifier(string identifier)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(identifier);
         var folded = _preserveIdentifierCasing ? identifier : identifier.ToLowerInvariant();
-        return $"\"{folded}\"";
+        // Escape embedded double quotes per PostgreSQL identifier rules.
+        var escaped = folded.Replace("\"", "\"\"", StringComparison.Ordinal);
+        return $"\"{escaped}\"";
     }
 
     private sealed record RelationMapping(IReadOnlyList<string> ParentColumns, IReadOnlyList<string> ChildColumns);
 
     private sealed record OrderTerm(string Expression, string Direction);
+
+    private sealed record UniqueKeyDescriptor(IReadOnlyList<string> Fields, string? Name)
+    {
+        public string Key => string.Join("|", Fields);
+        public string DisplayName => Name is null ? string.Join(", ", Fields) : Name;
+    }
+
+    private sealed record UniqueSelectorCandidate(UniqueKeyDescriptor Key, Dictionary<string, object> Values);
 
     private sealed class ParameterContext
     {

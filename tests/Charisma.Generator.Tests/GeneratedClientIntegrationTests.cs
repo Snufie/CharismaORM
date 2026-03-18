@@ -11,6 +11,8 @@ using System.Runtime.Loader;
 using System.Threading;
 using System.Threading.Tasks;
 using Charisma.Generator;
+using Charisma.Migration;
+using Charisma.Migration.Postgres;
 using Charisma.Parser;
 using Charisma.QueryEngine.Execution;
 using Charisma.QueryEngine.Exceptions;
@@ -184,6 +186,70 @@ public sealed class GeneratedClientIntegrationTests : IClassFixture<GeneratedAss
         Assert.NotNull(toDict);
         Assert.True(toDict!.ContainsKey("Robot"));
         Assert.Same(robotOmit, toDict["Robot"]);
+    }
+
+    [Fact]
+    public void Client_emits_startup_migration_method()
+    {
+        var client = _fixture.CreateClientWithExecutor(new FakeExecutor());
+        var clientType = client.GetType();
+
+        var methods = clientType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Where(m => string.Equals(m.Name, "MigrateAsync", StringComparison.Ordinal))
+            .ToArray();
+
+        Assert.Equal(2, methods.Length);
+
+        var schemaObjectOverload = methods.Single(m =>
+        {
+            var p = m.GetParameters();
+            return p.Length == 3 && string.Equals(p[0].Name, "schema", StringComparison.Ordinal);
+        });
+
+        Assert.Equal(typeof(Task<MigrationPlan>), schemaObjectOverload.ReturnType);
+        var schemaObjectParameters = schemaObjectOverload.GetParameters();
+        Assert.Equal("schema", schemaObjectParameters[0].Name);
+        Assert.Equal("options", schemaObjectParameters[1].Name);
+        Assert.Equal(typeof(PostgresMigrationOptions), Nullable.GetUnderlyingType(schemaObjectParameters[1].ParameterType) ?? schemaObjectParameters[1].ParameterType);
+        Assert.Equal("ct", schemaObjectParameters[2].Name);
+        Assert.Equal(typeof(CancellationToken), schemaObjectParameters[2].ParameterType);
+
+        var schemaPathOverload = methods.Single(m =>
+        {
+            var p = m.GetParameters();
+            return p.Length == 3 && string.Equals(p[0].Name, "schemaPath", StringComparison.Ordinal);
+        });
+
+        Assert.Equal(typeof(Task<MigrationPlan>), schemaPathOverload.ReturnType);
+        var schemaPathParameters = schemaPathOverload.GetParameters();
+        Assert.Equal(typeof(string), schemaPathParameters[0].ParameterType);
+        Assert.True(schemaPathParameters[0].HasDefaultValue);
+        Assert.Equal("schema.charisma", schemaPathParameters[0].DefaultValue as string);
+    }
+
+    [Fact]
+    public async Task Delegate_convenience_methods_route_to_expected_queries()
+    {
+        var fake = new FakeExecutor();
+        var locatieDelegate = _fixture.CreateDelegate("Locatie", fake);
+
+        var where = _fixture.CreateArgs("LocatieWhereInput",
+            ("Naam", _fixture.CreateArgs("StringFilter", ("Contains", "hq"))));
+
+        var existsResult = await _fixture.InvokeAsync(locatieDelegate, "ExistsAsync", where);
+        Assert.Equal(false, existsResult as bool?);
+        var countModel = AssertLastCall(fake, QueryType.Count, "Locatie");
+        Assert.NotNull(countModel.Args.GetType().GetProperty("Where")?.GetValue(countModel.Args));
+
+        await _fixture.InvokeAsync(locatieDelegate, "DeleteByIdAsync", Guid.NewGuid());
+        var deleteModel = AssertLastCall(fake, QueryType.Delete, "Locatie");
+        Assert.NotNull(deleteModel.Args.GetType().GetProperty("Where")?.GetValue(deleteModel.Args));
+
+        var updateData = _fixture.CreateArgs("LocatieUpdateInput", ("Naam", "Updated"));
+        await _fixture.InvokeAsync(locatieDelegate, "UpdateByIdAsync", Guid.NewGuid(), updateData);
+        var updateModel = AssertLastCall(fake, QueryType.Update, "Locatie");
+        var dataValue = updateModel.Args.GetType().GetProperty("Data")?.GetValue(updateModel.Args);
+        Assert.Same(updateData, dataValue);
     }
 
     [Fact]
@@ -497,6 +563,7 @@ public sealed class GeneratedAssemblyFixture : IAsyncLifetime
         {
             typeof(CharismaRuntimeOptions).Assembly,
             typeof(CharismaRuntime).Assembly,
+            typeof(PostgresMigrationOptions).Assembly,
             typeof(QueryModel).Assembly,
             typeof(CharismaSchema).Assembly,
             typeof(RoslynSchemaParser).Assembly

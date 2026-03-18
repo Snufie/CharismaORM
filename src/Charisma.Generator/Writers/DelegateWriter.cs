@@ -77,6 +77,11 @@ internal sealed class DelegateWriter : IWriter
             members.Add(findById);
         }
 
+        foreach (var convenience in BuildAdditionalConvenienceMethods(schema, model))
+        {
+            members.Add(convenience);
+        }
+
         var @class = SyntaxFactory.ClassDeclaration($"{model.Name}Delegate")
             .AddModifiers(SyntaxFactory.Token(SyntaxKind.PublicKeyword), SyntaxFactory.Token(SyntaxKind.SealedKeyword), SyntaxFactory.Token(SyntaxKind.PartialKeyword))
             .AddMembers(members.ToArray());
@@ -497,6 +502,367 @@ internal sealed class DelegateWriter : IWriter
                 },
                 $"The matching {model.Name} instance or null."));
     }
+
+    /// <summary>
+    /// Builds additional high-level convenience methods for generated delegates.
+    /// </summary>
+    private IEnumerable<MethodDeclarationSyntax> BuildAdditionalConvenienceMethods(CharismaSchema schema, ModelDefinition model)
+    {
+        yield return BuildExists(model);
+
+        if (model.PrimaryKey is not { } pk || pk.Fields.Count == 0)
+        {
+            yield break;
+        }
+
+        if (pk.Fields.Count == 1)
+        {
+            var singleField = model.GetField(pk.Fields[0]) as ScalarFieldDefinition;
+            if (singleField is not null)
+            {
+                yield return BuildDeleteBySinglePrimaryKey(schema, model, singleField);
+                yield return BuildUpdateBySinglePrimaryKey(schema, model, singleField);
+            }
+            yield break;
+        }
+
+        var compositeFields = pk.Fields
+            .Select(name => model.GetField(name) as ScalarFieldDefinition)
+            .Where(f => f is not null)
+            .Cast<ScalarFieldDefinition>()
+            .ToList();
+
+        if (compositeFields.Count != pk.Fields.Count)
+        {
+            yield break;
+        }
+
+        var selector = BuildCompositePrimaryKeySelector(model, pk);
+        yield return BuildFindByCompositePrimaryKey(schema, model, selector, compositeFields);
+        yield return BuildDeleteByCompositePrimaryKey(schema, model, selector, compositeFields);
+        yield return BuildUpdateByCompositePrimaryKey(schema, model, selector, compositeFields);
+    }
+
+    private static MethodDeclarationSyntax BuildExists(ModelDefinition model)
+    {
+        var body = SyntaxFactory.Block(
+            SyntaxFactory.LocalDeclarationStatement(
+                SyntaxFactory.VariableDeclaration(SyntaxFactory.ParseTypeName($"{model.Name}CountArgs"))
+                    .AddVariables(
+                        SyntaxFactory.VariableDeclarator("countArgs")
+                            .WithInitializer(
+                                SyntaxFactory.EqualsValueClause(
+                                    SyntaxFactory.ObjectCreationExpression(SyntaxFactory.ParseTypeName($"{model.Name}CountArgs"))
+                                        .WithInitializer(
+                                            SyntaxFactory.InitializerExpression(
+                                                SyntaxKind.ObjectInitializerExpression,
+                                                SyntaxFactory.SingletonSeparatedList<ExpressionSyntax>(
+                                                    SyntaxFactory.AssignmentExpression(
+                                                        SyntaxKind.SimpleAssignmentExpression,
+                                                        SyntaxFactory.IdentifierName("Where"),
+                                                        SyntaxFactory.IdentifierName("where"))))))))),
+            SyntaxFactory.LocalDeclarationStatement(
+                SyntaxFactory.VariableDeclaration(SyntaxFactory.ParseTypeName("var"))
+                    .AddVariables(
+                        SyntaxFactory.VariableDeclarator("count")
+                            .WithInitializer(
+                                SyntaxFactory.EqualsValueClause(
+                                    SyntaxFactory.AwaitExpression(
+                                        SyntaxFactory.InvocationExpression(SyntaxFactory.IdentifierName("CountAsync"))
+                                            .WithArgumentList(
+                                                SyntaxFactory.ArgumentList(
+                                                    SyntaxFactory.SeparatedList(new[]
+                                                    {
+                                                        SyntaxFactory.Argument(SyntaxFactory.IdentifierName("countArgs")),
+                                                        SyntaxFactory.Argument(SyntaxFactory.IdentifierName("ct"))
+                                                    })))))))),
+            SyntaxFactory.ReturnStatement(
+                SyntaxFactory.BinaryExpression(
+                    SyntaxKind.GreaterThanExpression,
+                    SyntaxFactory.IdentifierName("count"),
+                    SyntaxFactory.LiteralExpression(SyntaxKind.NumericLiteralExpression, SyntaxFactory.Literal(0)))));
+
+        return SyntaxFactory.MethodDeclaration(SyntaxFactory.ParseTypeName("Task<bool>"), "ExistsAsync")
+            .AddModifiers(SyntaxFactory.Token(SyntaxKind.PublicKeyword), SyntaxFactory.Token(SyntaxKind.AsyncKeyword))
+            .AddParameterListParameters(
+                SyntaxFactory.Parameter(SyntaxFactory.Identifier("where"))
+                    .WithType(SyntaxFactory.ParseTypeName($"{model.Name}WhereInput?"))
+                    .WithDefault(SyntaxFactory.EqualsValueClause(SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression))),
+                SyntaxFactory.Parameter(SyntaxFactory.Identifier("ct"))
+                    .WithType(SyntaxFactory.ParseTypeName("CancellationToken"))
+                    .WithDefault(SyntaxFactory.EqualsValueClause(SyntaxFactory.IdentifierName("default"))))
+            .WithBody(body)
+            .WithLeadingTrivia(BuildDoc(
+                $"Checks whether at least one {model.Name} exists for the optional filter.",
+                new[]
+                {
+                    ("where", "Optional filter restricting which rows are considered."),
+                    ("ct", "Cancellation token for the async operation.")
+                },
+                "True when a matching row exists; otherwise false."));
+    }
+
+    private MethodDeclarationSyntax BuildDeleteBySinglePrimaryKey(CharismaSchema schema, ModelDefinition model, ScalarFieldDefinition pkField)
+    {
+        var idType = MapScalarType(schema, pkField.RawType, nullable: false);
+        var bodyText = $@"{{
+    var argsValue = args ?? new {model.Name}DeleteArgs
+    {{
+        Where = new {model.Name}WhereUniqueInput {{ {pkField.Name} = id }}
+    }};
+
+    argsValue.Where ??= new {model.Name}WhereUniqueInput {{ {pkField.Name} = id }};
+    return await DeleteAsync(argsValue, ct).ConfigureAwait(false);
+}}";
+
+        return SyntaxFactory.MethodDeclaration(SyntaxFactory.ParseTypeName($"Task<{model.Name}?>"), "DeleteByIdAsync")
+            .AddModifiers(SyntaxFactory.Token(SyntaxKind.PublicKeyword), SyntaxFactory.Token(SyntaxKind.AsyncKeyword))
+            .AddParameterListParameters(
+                SyntaxFactory.Parameter(SyntaxFactory.Identifier("id")).WithType(SyntaxFactory.ParseTypeName(idType)),
+                SyntaxFactory.Parameter(SyntaxFactory.Identifier("args"))
+                    .WithType(SyntaxFactory.ParseTypeName($"{model.Name}DeleteArgs?"))
+                    .WithDefault(SyntaxFactory.EqualsValueClause(SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression))),
+                SyntaxFactory.Parameter(SyntaxFactory.Identifier("ct"))
+                    .WithType(SyntaxFactory.ParseTypeName("CancellationToken"))
+                    .WithDefault(SyntaxFactory.EqualsValueClause(SyntaxFactory.IdentifierName("default"))))
+            .WithBody(SyntaxFactory.ParseStatement(bodyText) as BlockSyntax ?? SyntaxFactory.Block())
+            .WithLeadingTrivia(BuildDoc(
+                $"Convenience helper to delete {model.Name} by primary key.",
+                new[]
+                {
+                    ("id", $"Primary key value of the {model.Name} row to delete."),
+                    ("args", "Optional args controlling select/include/omit."),
+                    ("ct", "Cancellation token for the async operation.")
+                },
+                $"The deleted {model.Name} instance or null."));
+    }
+
+    private MethodDeclarationSyntax BuildUpdateBySinglePrimaryKey(CharismaSchema schema, ModelDefinition model, ScalarFieldDefinition pkField)
+    {
+        var idType = MapScalarType(schema, pkField.RawType, nullable: false);
+        var bodyText = $@"{{
+    var argsValue = args ?? new {model.Name}UpdateArgs
+    {{
+        Data = data,
+        Where = new {model.Name}WhereUniqueInput {{ {pkField.Name} = id }}
+    }};
+
+    argsValue.Data = data;
+    argsValue.Where ??= new {model.Name}WhereUniqueInput {{ {pkField.Name} = id }};
+    return await UpdateAsync(argsValue, ct).ConfigureAwait(false);
+}}";
+
+        return SyntaxFactory.MethodDeclaration(SyntaxFactory.ParseTypeName($"Task<{model.Name}?>"), "UpdateByIdAsync")
+            .AddModifiers(SyntaxFactory.Token(SyntaxKind.PublicKeyword), SyntaxFactory.Token(SyntaxKind.AsyncKeyword))
+            .AddParameterListParameters(
+                SyntaxFactory.Parameter(SyntaxFactory.Identifier("id")).WithType(SyntaxFactory.ParseTypeName(idType)),
+                SyntaxFactory.Parameter(SyntaxFactory.Identifier("data")).WithType(SyntaxFactory.ParseTypeName($"{model.Name}UpdateInput")),
+                SyntaxFactory.Parameter(SyntaxFactory.Identifier("args"))
+                    .WithType(SyntaxFactory.ParseTypeName($"{model.Name}UpdateArgs?"))
+                    .WithDefault(SyntaxFactory.EqualsValueClause(SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression))),
+                SyntaxFactory.Parameter(SyntaxFactory.Identifier("ct"))
+                    .WithType(SyntaxFactory.ParseTypeName("CancellationToken"))
+                    .WithDefault(SyntaxFactory.EqualsValueClause(SyntaxFactory.IdentifierName("default"))))
+            .WithBody(SyntaxFactory.ParseStatement(bodyText) as BlockSyntax ?? SyntaxFactory.Block())
+            .WithLeadingTrivia(BuildDoc(
+                $"Convenience helper to update {model.Name} by primary key.",
+                new[]
+                {
+                    ("id", $"Primary key value of the {model.Name} row to update."),
+                    ("data", "Fields to update."),
+                    ("args", "Optional args controlling select/include/omit."),
+                    ("ct", "Cancellation token for the async operation.")
+                },
+                $"The updated {model.Name} instance or null."));
+    }
+
+    private MethodDeclarationSyntax BuildFindByCompositePrimaryKey(CharismaSchema schema, ModelDefinition model, CompositePrimaryKeySelector selector, IReadOnlyList<ScalarFieldDefinition> fields)
+    {
+        var body = BuildCompositePrimaryKeyBody(
+            model,
+            selector,
+            fields,
+            argsTypeName: $"{model.Name}FindUniqueArgs",
+            whereAssignmentTarget: "argsValue.Where",
+            setup: "",
+            returnCall: "return await FindUniqueAsync(argsValue, ct).ConfigureAwait(false);");
+
+        return SyntaxFactory.MethodDeclaration(SyntaxFactory.ParseTypeName($"Task<{model.Name}?>"), "FindByKeyAsync")
+            .AddModifiers(SyntaxFactory.Token(SyntaxKind.PublicKeyword), SyntaxFactory.Token(SyntaxKind.AsyncKeyword))
+            .AddParameterListParameters(BuildCompositePkParameters(schema, model, fields, includeData: false, argsTypeName: $"{model.Name}FindUniqueArgs?").ToArray())
+            .WithBody(body)
+            .WithLeadingTrivia(BuildDoc(
+                $"Convenience helper to find {model.Name} by composite primary key.",
+                BuildCompositePkParamDocs(fields, includeData: false),
+                $"The matching {model.Name} instance or null."));
+    }
+
+    private MethodDeclarationSyntax BuildDeleteByCompositePrimaryKey(CharismaSchema schema, ModelDefinition model, CompositePrimaryKeySelector selector, IReadOnlyList<ScalarFieldDefinition> fields)
+    {
+        var body = BuildCompositePrimaryKeyBody(
+            model,
+            selector,
+            fields,
+            argsTypeName: $"{model.Name}DeleteArgs",
+            whereAssignmentTarget: "argsValue.Where",
+            setup: "",
+            returnCall: "return await DeleteAsync(argsValue, ct).ConfigureAwait(false);");
+
+        return SyntaxFactory.MethodDeclaration(SyntaxFactory.ParseTypeName($"Task<{model.Name}?>"), "DeleteByKeyAsync")
+            .AddModifiers(SyntaxFactory.Token(SyntaxKind.PublicKeyword), SyntaxFactory.Token(SyntaxKind.AsyncKeyword))
+            .AddParameterListParameters(BuildCompositePkParameters(schema, model, fields, includeData: false, argsTypeName: $"{model.Name}DeleteArgs?").ToArray())
+            .WithBody(body)
+            .WithLeadingTrivia(BuildDoc(
+                $"Convenience helper to delete {model.Name} by composite primary key.",
+                BuildCompositePkParamDocs(fields, includeData: false),
+                $"The deleted {model.Name} instance or null."));
+    }
+
+    private MethodDeclarationSyntax BuildUpdateByCompositePrimaryKey(CharismaSchema schema, ModelDefinition model, CompositePrimaryKeySelector selector, IReadOnlyList<ScalarFieldDefinition> fields)
+    {
+        var body = BuildCompositePrimaryKeyBody(
+            model,
+            selector,
+            fields,
+            argsTypeName: $"{model.Name}UpdateArgs",
+            whereAssignmentTarget: "argsValue.Where",
+            setup: "argsValue.Data = data;",
+            returnCall: "return await UpdateAsync(argsValue, ct).ConfigureAwait(false);");
+
+        return SyntaxFactory.MethodDeclaration(SyntaxFactory.ParseTypeName($"Task<{model.Name}?>"), "UpdateByKeyAsync")
+            .AddModifiers(SyntaxFactory.Token(SyntaxKind.PublicKeyword), SyntaxFactory.Token(SyntaxKind.AsyncKeyword))
+            .AddParameterListParameters(BuildCompositePkParameters(schema, model, fields, includeData: true, argsTypeName: $"{model.Name}UpdateArgs?").ToArray())
+            .WithBody(body)
+            .WithLeadingTrivia(BuildDoc(
+                $"Convenience helper to update {model.Name} by composite primary key.",
+                BuildCompositePkParamDocs(fields, includeData: true),
+                $"The updated {model.Name} instance or null."));
+    }
+
+    private BlockSyntax BuildCompositePrimaryKeyBody(
+        ModelDefinition model,
+        CompositePrimaryKeySelector selector,
+        IReadOnlyList<ScalarFieldDefinition> fields,
+        string argsTypeName,
+        string whereAssignmentTarget,
+        string setup,
+        string returnCall)
+    {
+        var selectorAssignments = string.Join(", ", fields.Select(f => $"{f.Name} = {ToCamelCase(f.Name)}"));
+        var setupSection = string.IsNullOrWhiteSpace(setup) ? string.Empty : $"\n    {setup}\n";
+        var bodyText = $@"{{
+    var argsValue = args ?? new {argsTypeName}
+    {{
+        Where = new {model.Name}WhereUniqueInput
+        {{
+            {selector.PropertyName} = new {selector.SelectorTypeName}
+            {{
+                {selectorAssignments}
+            }}
+        }}
+    }};
+{setupSection}
+    {whereAssignmentTarget} ??= new {model.Name}WhereUniqueInput
+    {{
+        {selector.PropertyName} = new {selector.SelectorTypeName}
+        {{
+            {selectorAssignments}
+        }}
+    }};
+
+    {returnCall}
+}}";
+
+        return SyntaxFactory.ParseStatement(bodyText) as BlockSyntax ?? SyntaxFactory.Block();
+    }
+
+    private IEnumerable<ParameterSyntax> BuildCompositePkParameters(CharismaSchema schema, ModelDefinition model, IReadOnlyList<ScalarFieldDefinition> fields, bool includeData, string argsTypeName)
+    {
+        foreach (var field in fields)
+        {
+            yield return SyntaxFactory.Parameter(SyntaxFactory.Identifier(ToCamelCase(field.Name)))
+                .WithType(SyntaxFactory.ParseTypeName(MapScalarType(schema, field.RawType, nullable: false)));
+        }
+
+        if (includeData)
+        {
+            yield return SyntaxFactory.Parameter(SyntaxFactory.Identifier("data"))
+                .WithType(SyntaxFactory.ParseTypeName($"{model.Name}UpdateInput"));
+        }
+
+        yield return SyntaxFactory.Parameter(SyntaxFactory.Identifier("args"))
+            .WithType(SyntaxFactory.ParseTypeName(argsTypeName))
+            .WithDefault(SyntaxFactory.EqualsValueClause(SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression)));
+
+        yield return SyntaxFactory.Parameter(SyntaxFactory.Identifier("ct"))
+            .WithType(SyntaxFactory.ParseTypeName("CancellationToken"))
+            .WithDefault(SyntaxFactory.EqualsValueClause(SyntaxFactory.IdentifierName("default")));
+    }
+
+    private static IEnumerable<(string Name, string Description)> BuildCompositePkParamDocs(IReadOnlyList<ScalarFieldDefinition> fields, bool includeData)
+    {
+        var docs = new List<(string Name, string Description)>();
+        docs.AddRange(fields.Select(f => (ToCamelCase(f.Name), $"Primary key component '{f.Name}'.")));
+
+        if (includeData)
+        {
+            docs.Add(("data", "Fields to update."));
+        }
+
+        docs.Add(("args", "Optional args controlling select/include/omit."));
+        docs.Add(("ct", "Cancellation token for the async operation."));
+        return docs;
+    }
+
+    private static CompositePrimaryKeySelector BuildCompositePrimaryKeySelector(ModelDefinition model, PrimaryKeyDefinition pk)
+    {
+        var propertyName = $"By{string.Join("And", pk.Fields.Select(ToPascalIdentifier))}";
+        return new CompositePrimaryKeySelector(propertyName, $"{model.Name}{propertyName}Input");
+    }
+
+    private static string ToPascalIdentifier(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return "Key";
+        }
+
+        var parts = raw
+            .Split(new[] { '_', '-', ' ', '.', ':', ';', '/', '\\', ',', '(', ')', '[', ']' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => p.Trim())
+            .Where(p => p.Length > 0)
+            .ToArray();
+
+        if (parts.Length == 0)
+        {
+            return "Key";
+        }
+
+        var pascal = string.Concat(parts.Select(p => char.ToUpperInvariant(p[0]) + p[1..]));
+        if (!char.IsLetter(pascal[0]) && pascal[0] != '_')
+        {
+            pascal = $"K{pascal}";
+        }
+
+        return pascal;
+    }
+
+    private static string ToCamelCase(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return "key";
+        }
+
+        if (raw.Length == 1)
+        {
+            return raw.ToLowerInvariant();
+        }
+
+        return char.ToLowerInvariant(raw[0]) + raw[1..];
+    }
+
+    private sealed record CompositePrimaryKeySelector(string PropertyName, string SelectorTypeName);
 
     /// <summary>
     /// Composes a delegate method that constructs a query model and dispatches it through the executor.

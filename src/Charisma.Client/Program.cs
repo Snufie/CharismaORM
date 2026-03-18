@@ -35,10 +35,16 @@ public static class Program
         if (args.Length == 0)
         {
             PrintUsage();
-            return 1;
+            return 0;
         }
 
         var command = args[0].ToLowerInvariant();
+
+        if (command is "-h" or "--help" or "help")
+        {
+            PrintUsage();
+            return 0;
+        }
 
         return command switch
         {
@@ -542,6 +548,8 @@ public static class Program
     private static void PrintUsage()
     {
         CliConsole.Info("Usage:");
+        CliConsole.Info("  charisma [--help|-h]");
+        CliConsole.Bullet("prints this help overview");
         CliConsole.Info("  charisma generate [schemaPath] [outputPath] [--root-namespace MyApp.Generated]");
         CliConsole.Bullet("defaults: schema.charisma in cwd, output ./Generated or generator.output, root namespace from generator or <cwd>.Generated");
         CliConsole.Info("  charisma db pull [schemaPath] [--connection <conn>] [--force]");

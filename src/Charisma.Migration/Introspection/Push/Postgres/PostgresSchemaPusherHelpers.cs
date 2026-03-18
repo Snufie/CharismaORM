@@ -11,18 +11,27 @@ namespace Charisma.Migration.Introspection.Push.Postgres;
 /// </summary>
 internal static class PostgresSchemaPusherHelpers
 {
+    /// <summary>
+    /// Quotes a PostgreSQL identifier and escapes embedded double quotes.
+    /// </summary>
+    public static string QuoteIdentifier(string identifier)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(identifier);
+        return $"\"{identifier.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
+    }
+
     public static string BuildEnum(EnumDefinition enumDef)
     {
         var typeName = ToPgEnumTypeName(enumDef.Name);
-        var values = string.Join(", ", enumDef.Values.Select(v => $"'{v}'"));
+        var values = string.Join(", ", enumDef.Values.Select(v => $"'{EscapeSqlLiteral(v)}'"));
         // Some Postgres versions do not support "create type if not exists"; drop defensively, then recreate.
-        return $"drop type if exists \"{typeName}\" cascade; create type \"{typeName}\" as enum ({values});";
+        return $"drop type if exists {QuoteIdentifier(typeName)} cascade; create type {QuoteIdentifier(typeName)} as enum ({values});";
     }
 
     public static string BuildTable(ModelDefinition model, IReadOnlyDictionary<string, EnumDefinition> enums)
     {
         var sb = new StringBuilder();
-        sb.Append("create table if not exists \"").Append(model.Name).Append("\" (\n");
+        sb.Append("create table if not exists ").Append(QuoteIdentifier(model.Name)).Append(" (\n");
 
         var columnLines = new List<string>();
         foreach (var field in model.Fields.OfType<ScalarFieldDefinition>())
@@ -33,14 +42,14 @@ internal static class PostgresSchemaPusherHelpers
         if (model.PrimaryKey is not null && model.PrimaryKey.Fields.Count > 0)
         {
             var pkCols = string.Join(", ", model.PrimaryKey.Fields.Select(Quote));
-            columnLines.Add($"  constraint \"{model.Name}_pkey\" primary key ({pkCols})");
+            columnLines.Add($"  constraint {QuoteIdentifier(model.Name + "_pkey")} primary key ({pkCols})");
         }
 
         foreach (var uq in model.UniqueConstraints)
         {
             var name = string.IsNullOrEmpty(uq.Name) ? $"{model.Name}_uq_{string.Join("_", uq.Fields)}" : uq.Name!;
             var cols = string.Join(", ", uq.Fields.Select(Quote));
-            columnLines.Add($"  constraint \"{name}\" unique ({cols})");
+            columnLines.Add($"  constraint {QuoteIdentifier(name)} unique ({cols})");
         }
 
         sb.Append(string.Join(",\n", columnLines));
@@ -51,7 +60,7 @@ internal static class PostgresSchemaPusherHelpers
     public static string BuildAddColumn(string table, ScalarFieldDefinition field, bool isEnum)
     {
         var col = BuildColumn(field, isEnum);
-        return $"alter table \"{table}\" add column \n  {col};";
+        return $"alter table {QuoteIdentifier(table)} add column \n  {col};";
     }
 
     public static string BuildIndex(string table, IndexDefinition idx)
@@ -59,12 +68,12 @@ internal static class PostgresSchemaPusherHelpers
         var name = string.IsNullOrEmpty(idx.Name) ? $"idx_{table}_{string.Join("_", idx.Fields)}" : idx.Name!;
         var cols = string.Join(", ", idx.Fields.Select(Quote));
         var unique = idx.IsUnique ? "unique " : string.Empty;
-        return $"create {unique}index if not exists \"{name}\" on \"{table}\" ({cols});";
+        return $"create {unique}index if not exists {QuoteIdentifier(name)} on {QuoteIdentifier(table)} ({cols});";
     }
 
     public static string BuildDropIndex(string table, string indexName)
     {
-        return $"drop index if exists \"{indexName}\";";
+        return $"drop index if exists {QuoteIdentifier(indexName)};";
     }
 
     public static string BuildForeignKey(string table, RelationInfo ri)
@@ -75,7 +84,7 @@ internal static class PostgresSchemaPusherHelpers
         var onDelete = MapAction(ri.OnDelete) ?? "set null";
         var onUpdate = MapAction(ri.OnUpdate) ?? "cascade";
 
-        return $"alter table \"{table}\" add constraint \"{constraintName}\" foreign key ({localCols}) references \"{ri.ForeignModel}\" ({foreignCols}) on delete {onDelete} on update {onUpdate};";
+        return $"alter table {QuoteIdentifier(table)} add constraint {QuoteIdentifier(constraintName)} foreign key ({localCols}) references {QuoteIdentifier(ri.ForeignModel)} ({foreignCols}) on delete {onDelete} on update {onUpdate};";
     }
 
     public static string BuildColumn(ScalarFieldDefinition field, bool isEnum)
@@ -83,40 +92,40 @@ internal static class PostgresSchemaPusherHelpers
         var type = MapColumnType(field, isEnum);
         var nullability = field.IsOptional ? "" : " not null";
         var defaultSql = field.IsUpdatedAt ? " default now()" : MapDefault(field, isEnum);
-        return $"\"{field.Name}\" {type}{defaultSql}{nullability}";
+        return $"{QuoteIdentifier(field.Name)} {type}{defaultSql}{nullability}";
     }
 
     public static string BuildAlterColumnType(string table, string column, string targetType, bool withUsingCast = false, string? usingExpression = null)
     {
-        var usingClause = usingExpression ?? (withUsingCast ? $" using \"{column}\"::{targetType}" : string.Empty);
-        return $"alter table \"{table}\" alter column \"{column}\" type {targetType}{usingClause};";
+        var usingClause = usingExpression ?? (withUsingCast ? $" using {QuoteIdentifier(column)}::{targetType}" : string.Empty);
+        return $"alter table {QuoteIdentifier(table)} alter column {QuoteIdentifier(column)} type {targetType}{usingClause};";
     }
 
     public static string BuildAlterNullability(string table, string column, bool notNull)
     {
         return notNull
-            ? $"alter table \"{table}\" alter column \"{column}\" set not null;"
-            : $"alter table \"{table}\" alter column \"{column}\" drop not null;";
+            ? $"alter table {QuoteIdentifier(table)} alter column {QuoteIdentifier(column)} set not null;"
+            : $"alter table {QuoteIdentifier(table)} alter column {QuoteIdentifier(column)} drop not null;";
     }
 
     public static string BuildSetDefault(string table, string column, string defaultExpression)
     {
-        return $"alter table \"{table}\" alter column \"{column}\" set default {defaultExpression};";
+        return $"alter table {QuoteIdentifier(table)} alter column {QuoteIdentifier(column)} set default {defaultExpression};";
     }
 
     public static string BuildDropDefault(string table, string column)
     {
-        return $"alter table \"{table}\" alter column \"{column}\" drop default;";
+        return $"alter table {QuoteIdentifier(table)} alter column {QuoteIdentifier(column)} drop default;";
     }
 
     public static string BuildDropColumn(string table, string column)
     {
-        return $"alter table \"{table}\" drop column if exists \"{column}\" cascade;";
+        return $"alter table {QuoteIdentifier(table)} drop column if exists {QuoteIdentifier(column)} cascade;";
     }
 
     public static string BuildDropTable(string table)
     {
-        return $"drop table if exists \"{table}\" cascade;";
+        return $"drop table if exists {QuoteIdentifier(table)} cascade;";
     }
 
     public static string BuildDropInboundForeignKeys(string table, string column)
@@ -132,8 +141,8 @@ begin
         where tc.constraint_type = 'FOREIGN KEY'
             and ccu.table_schema = 'public'
             and kcu.table_schema = 'public'
-            and ccu.table_name = '{table}'
-            and ccu.column_name = '{column}'
+            and ccu.table_name = '{EscapeSqlLiteral(table)}'
+            and ccu.column_name = '{EscapeSqlLiteral(column)}'
     ) loop
         execute format('alter table %I drop constraint %I', r.table_name, r.constraint_name);
     end loop;
@@ -142,7 +151,7 @@ end$$;";
 
     public static string BuildRenameColumn(string table, string from, string to)
     {
-        return $"alter table \"{table}\" rename column \"{from}\" to \"{to}\";";
+        return $"alter table {QuoteIdentifier(table)} rename column {QuoteIdentifier(from)} to {QuoteIdentifier(to)};";
     }
 
     public static string MapColumnType(ScalarFieldDefinition field, bool isEnum)
@@ -209,7 +218,8 @@ end$$;";
         return def.Kind switch
         {
             DefaultValueKind.Autoincrement when field.RawType is "Int" or "BigInt" => string.Empty,
-            DefaultValueKind.UuidV4 or DefaultValueKind.UuidV7 => " default gen_random_uuid()",
+            DefaultValueKind.UuidV4 => " default gen_random_uuid()",
+            DefaultValueKind.UuidV7 => " default uuidv7()",
             DefaultValueKind.Now => " default now()",
             DefaultValueKind.Json when def.Value is not null => $" default '{EscapeSqlLiteral(def.Value)}'::jsonb",
             DefaultValueKind.Static when def.Value is not null => BuildStaticDefault(def.Value, field.RawType, isEnum),
@@ -268,7 +278,7 @@ end$$;";
         };
     }
 
-    public static string Quote(string identifier) => $"\"{identifier}\"";
+    public static string Quote(string identifier) => QuoteIdentifier(identifier);
 
     public static int? ExtractLength(string attr)
     {

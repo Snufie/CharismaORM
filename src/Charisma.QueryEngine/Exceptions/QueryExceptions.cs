@@ -115,3 +115,17 @@ public sealed class VoidTouchException : CharismaQueryException
     {
     }
 }
+
+/// <summary>
+/// Thrown for database/provider execution errors that do not map to a specific higher-level constraint exception.
+/// </summary>
+public sealed class DatabaseExecutionException : CharismaQueryException
+{
+    public string? SqlState { get; }
+
+    public DatabaseExecutionException(string modelName, string operation, string message, string? sqlState = null, Exception? inner = null)
+        : base(modelName, operation, message, inner)
+    {
+        SqlState = sqlState;
+    }
+}

@@ -173,7 +173,7 @@ public sealed partial class PostgresSqlExecutor
         }
     }
 
-    private static string? BuildKey(ModelMetadata meta, IDataRecord reader, string prefix)
+    private string? BuildKey(ModelMetadata meta, IDataRecord reader, string prefix)
     {
         if (meta.PrimaryKey is null)
         {
@@ -252,7 +252,7 @@ public sealed partial class PostgresSqlExecutor
         }
     }
 
-    private static void SetReference(object parentInstance, string relationName, object? childInstance)
+    private void SetReference(object parentInstance, string relationName, object? childInstance)
     {
         var prop = parentInstance.GetType().GetProperty(relationName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
         if (prop?.CanWrite == true)
@@ -261,7 +261,7 @@ public sealed partial class PostgresSqlExecutor
         }
     }
 
-    private static void AttachToCollection(object parentInstance, string relationName, object childInstance)
+    private void AttachToCollection(object parentInstance, string relationName, object childInstance)
     {
         var prop = parentInstance.GetType().GetProperty(relationName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
         if (prop is null || !prop.CanWrite)
@@ -284,7 +284,7 @@ public sealed partial class PostgresSqlExecutor
         prop.SetValue(parentInstance, newList);
     }
 
-    private static int TryGetOrdinal(IDataRecord reader, string columnName)
+    private int TryGetOrdinal(IDataRecord reader, string columnName)
     {
         try
         {
@@ -418,7 +418,7 @@ public sealed partial class PostgresSqlExecutor
     /// <summary>
     /// Projects reader columns (count/min/max/avg/sum) into the aggregate result object graph.
     /// </summary>
-    private static void PopulateAggregateResult(object aggregateResult, IDataRecord reader)
+    private void PopulateAggregateResult(object aggregateResult, IDataRecord reader)
     {
         for (var i = 0; i < reader.FieldCount; i++)
         {
@@ -460,7 +460,7 @@ public sealed partial class PostgresSqlExecutor
         }
     }
 
-    private static void PopulateGroupByResult(ModelMetadata meta, object groupResult, IDataRecord reader)
+    private void PopulateGroupByResult(ModelMetadata meta, object groupResult, IDataRecord reader)
     {
         foreach (var field in meta.Fields.Where(f => f.Kind == FieldKind.Scalar))
         {
@@ -477,7 +477,7 @@ public sealed partial class PostgresSqlExecutor
         PopulateAggregateResult(groupResult, reader);
     }
 
-    private static void ApplyNestedAggregateValue(object root, string containerProperty, string fieldName, object value)
+    private void ApplyNestedAggregateValue(object root, string containerProperty, string fieldName, object value)
     {
         var containerProp = root.GetType().GetProperty(containerProperty, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
         if (containerProp is null || !containerProp.CanWrite)
@@ -495,7 +495,7 @@ public sealed partial class PostgresSqlExecutor
         containerProp.SetValue(root, current);
     }
 
-    private static void SetPropertyValue(object target, string propertyName, object value)
+    private void SetPropertyValue(object target, string propertyName, object value)
     {
         var prop = target.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
         if (prop is null || !prop.CanWrite)
@@ -508,7 +508,7 @@ public sealed partial class PostgresSqlExecutor
         prop.SetValue(target, converted);
     }
 
-    private static object? ConvertAggregateValue(object value, Type targetType)
+    private object? ConvertAggregateValue(object value, Type targetType)
     {
         if (value is null || value is DBNull)
         {
@@ -538,12 +538,12 @@ public sealed partial class PostgresSqlExecutor
         return value;
     }
 
-    private static object? GetProperty(object target, string name)
+    private object? GetProperty(object target, string name)
     {
         return target.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance)?.GetValue(target);
     }
 
-    private static object GetRequiredProperty(object target, string name)
+    private object GetRequiredProperty(object target, string name)
     {
         var value = GetProperty(target, name);
         if (value is null)
@@ -553,7 +553,7 @@ public sealed partial class PostgresSqlExecutor
         return value;
     }
 
-    private static Dictionary<FieldMetadata, object> ExtractRelationPayloads(ModelMetadata meta, object data)
+    private Dictionary<FieldMetadata, object> ExtractRelationPayloads(ModelMetadata meta, object data)
     {
         var payloads = new Dictionary<FieldMetadata, object>();
 
@@ -570,7 +570,7 @@ public sealed partial class PostgresSqlExecutor
         return payloads;
     }
 
-    private static void EnsureSelectIncludeExclusivity(object? select, object? include)
+    private void EnsureSelectIncludeExclusivity(object? select, object? include)
     {
         if (select is not null && include is not null)
         {
@@ -578,7 +578,7 @@ public sealed partial class PostgresSqlExecutor
         }
     }
 
-    private static void EnsureSelectIncludeOmitExclusivity(object? select, object? include, object? omit)
+    private void EnsureSelectIncludeOmitExclusivity(object? select, object? include, object? omit)
     {
         if ((select is not null && include is not null) || (select is not null && omit is not null) || (include is not null && omit is not null))
         {
@@ -586,7 +586,7 @@ public sealed partial class PostgresSqlExecutor
         }
     }
 
-    private static IReadOnlyList<string> BuildSelectColumns(ModelMetadata meta, object? selectObj, object? omitObj = null, bool includePrimaryKey = false)
+    private IReadOnlyList<string> BuildSelectColumns(ModelMetadata meta, object? selectObj, object? omitObj = null, bool includePrimaryKey = false)
     {
         var selected = new List<string>();
         if (selectObj is null && omitObj is null)
@@ -776,7 +776,7 @@ public sealed partial class PostgresSqlExecutor
         throw new NotSupportedException($"Could not resolve foreign key ownership for relation '{relationField.Name}' between '{parentMeta.Name}' and '{childMeta.Name}'.");
     }
 
-    private static bool TryResolveChildForeignKey(ModelMetadata parentMeta, ModelMetadata childMeta, FieldMetadata relationField, out ForeignKeyMetadata? fk)
+    private bool TryResolveChildForeignKey(ModelMetadata parentMeta, ModelMetadata childMeta, FieldMetadata relationField, out ForeignKeyMetadata? fk)
     {
         fk = childMeta.ForeignKeys
             .FirstOrDefault(x => string.Equals(x.PrincipalModel, parentMeta.Name, StringComparison.Ordinal)
@@ -784,7 +784,7 @@ public sealed partial class PostgresSqlExecutor
         return fk is not null;
     }
 
-    private static bool TryResolveParentForeignKey(ModelMetadata parentMeta, ModelMetadata childMeta, FieldMetadata relationField, out ForeignKeyMetadata? fk)
+    private bool TryResolveParentForeignKey(ModelMetadata parentMeta, ModelMetadata childMeta, FieldMetadata relationField, out ForeignKeyMetadata? fk)
     {
         fk = parentMeta.ForeignKeys
             .FirstOrDefault(x => string.Equals(x.PrincipalModel, childMeta.Name, StringComparison.Ordinal)
@@ -792,7 +792,7 @@ public sealed partial class PostgresSqlExecutor
         return fk is not null;
     }
 
-    private static void AppendSelectColumns(List<string> fragments, ModelMetadata meta, IReadOnlyList<string> columns, string alias, string prefix)
+    private void AppendSelectColumns(List<string> fragments, ModelMetadata meta, IReadOnlyList<string> columns, string alias, string prefix)
     {
         foreach (var column in columns)
         {
@@ -810,7 +810,7 @@ public sealed partial class PostgresSqlExecutor
         }
     }
 
-    private static IReadOnlyList<string> BuildJoinFragments(IReadOnlyList<PlanningIncludePlan> includes)
+    private IReadOnlyList<string> BuildJoinFragments(IReadOnlyList<PlanningIncludePlan> includes)
     {
         var joins = new List<string>();
         foreach (var include in includes)
@@ -824,58 +824,41 @@ public sealed partial class PostgresSqlExecutor
         return joins;
     }
 
-    private static string BuildWhereUnique(ModelMetadata meta, object whereObj, List<NpgsqlParameter> parameters, ParameterContext paramCtx, string tableAlias)
+    private string BuildWhereUnique(ModelMetadata meta, object whereObj, List<NpgsqlParameter> parameters, ParameterContext paramCtx, string tableAlias)
     {
         ArgumentNullException.ThrowIfNull(meta);
         ArgumentNullException.ThrowIfNull(whereObj);
         ArgumentNullException.ThrowIfNull(paramCtx);
 
-        var clauses = new List<string>();
-        foreach (var field in meta.Fields.Where(f => f.Kind == FieldKind.Scalar))
+        var scalarByName = meta.Fields
+            .Where(f => f.Kind == FieldKind.Scalar)
+            .ToDictionary(f => f.Name, f => f, StringComparer.OrdinalIgnoreCase);
+
+        var selected = ResolveUniqueSelector(meta, whereObj, scalarByName);
+        var clauses = new List<string>(selected.Values.Count);
+        foreach (var pair in selected.Values)
         {
-            var prop = whereObj.GetType().GetProperty(field.Name, BindingFlags.Public | BindingFlags.Instance);
-            if (prop is null)
-            {
-                continue;
-            }
-
-            var value = prop.GetValue(whereObj);
-            if (value is null)
-            {
-                continue;
-            }
-
+            var field = scalarByName[pair.Key];
             var paramName = paramCtx.Next();
             clauses.Add($"\"{tableAlias}\".{QuoteIdentifier(field.Name)} = {paramName}");
-            parameters.Add(CreateParameter(paramName, value, field.ClrType));
-        }
-
-        if (clauses.Count == 0)
-        {
-            throw new InvalidOperationException($"Where predicate for '{meta.Name}' produced no filters; refusing to run a non-unique mutation.");
+            parameters.Add(CreateParameter(paramName, pair.Value, field.ClrType));
         }
 
         return string.Join(" AND ", clauses);
     }
 
-    private static void EnsureWhereValuesPresentOnCreate(ModelMetadata meta, object whereObj, object createObj, string relationName)
+    private void EnsureWhereValuesPresentOnCreate(ModelMetadata meta, object whereObj, object createObj, string relationName)
     {
-        var whereType = whereObj.GetType();
+        var scalarByName = meta.Fields
+            .Where(f => f.Kind == FieldKind.Scalar)
+            .ToDictionary(f => f.Name, f => f, StringComparer.OrdinalIgnoreCase);
+        var selected = ResolveUniqueSelector(meta, whereObj, scalarByName);
+
         var createType = createObj.GetType();
-
-        foreach (var field in meta.Fields.Where(f => f.Kind == FieldKind.Scalar))
+        foreach (var pair in selected.Values)
         {
-            var whereProp = whereType.GetProperty(field.Name, BindingFlags.Public | BindingFlags.Instance);
-            if (whereProp is null)
-            {
-                continue;
-            }
-
-            var whereValue = whereProp.GetValue(whereObj);
-            if (whereValue is null)
-            {
-                continue;
-            }
+            var field = scalarByName[pair.Key];
+            var whereValue = pair.Value;
 
             var createProp = createType.GetProperty(field.Name, BindingFlags.Public | BindingFlags.Instance);
             if (createProp is null)
@@ -900,7 +883,233 @@ public sealed partial class PostgresSqlExecutor
         }
     }
 
-    private static bool IsUnsetValue(object? value, Type propertyType)
+    private UniqueSelectorCandidate ResolveUniqueSelector(ModelMetadata meta, object whereObj, IReadOnlyDictionary<string, FieldMetadata> scalarByName)
+    {
+        var candidates = new Dictionary<string, UniqueSelectorCandidate>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var key in EnumerateUniqueFieldSets(meta))
+        {
+            if (TryExtractUniqueValues(whereObj, scalarByName, key.Fields, out var values))
+            {
+                AddUniqueCandidate(candidates, new UniqueSelectorCandidate(key, values));
+            }
+
+            if (key.Fields.Count > 1)
+            {
+                var selectorName = BuildCompositeSelectorPropertyName(key.Fields, key.Name);
+                var nestedSelector = GetPropertyValue(whereObj, selectorName);
+                if (nestedSelector is null)
+                {
+                    continue;
+                }
+
+                if (!TryExtractUniqueValues(nestedSelector, scalarByName, key.Fields, out var nestedValues))
+                {
+                    throw new InvalidOperationException($"Composite unique selector '{selectorName}' on '{meta.Name}' must provide all fields: {string.Join(", ", key.Fields)}.");
+                }
+
+                AddUniqueCandidate(candidates, new UniqueSelectorCandidate(key, nestedValues));
+            }
+        }
+
+        if (candidates.Count == 0)
+        {
+            throw new InvalidOperationException($"WhereUnique for '{meta.Name}' must specify exactly one unique selector.");
+        }
+
+        if (candidates.Count > 1)
+        {
+            var selectorNames = string.Join(", ", candidates.Values.Select(c => c.Key.DisplayName));
+            throw new InvalidOperationException($"WhereUnique for '{meta.Name}' is ambiguous; provide only one selector. Provided: {selectorNames}.");
+        }
+
+        return candidates.Values.Single();
+    }
+
+    private static void AddUniqueCandidate(IDictionary<string, UniqueSelectorCandidate> candidates, UniqueSelectorCandidate candidate)
+    {
+        var key = candidate.Key.Key;
+        if (!candidates.TryGetValue(key, out var existing))
+        {
+            candidates[key] = candidate;
+            return;
+        }
+
+        foreach (var pair in candidate.Values)
+        {
+            if (!existing.Values.TryGetValue(pair.Key, out var existingValue))
+            {
+                throw new InvalidOperationException($"Unique selector '{candidate.Key.DisplayName}' was provided with inconsistent field sets.");
+            }
+
+            if (!Equals(existingValue, pair.Value))
+            {
+                throw new InvalidOperationException($"Unique selector '{candidate.Key.DisplayName}' was provided multiple times with different values for field '{pair.Key}'.");
+            }
+        }
+    }
+
+    private bool TryExtractUniqueValues(
+        object source,
+        IReadOnlyDictionary<string, FieldMetadata> scalarByName,
+        IReadOnlyList<string> fields,
+        out Dictionary<string, object> values)
+    {
+        values = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        foreach (var fieldName in fields)
+        {
+            if (!scalarByName.ContainsKey(fieldName))
+            {
+                values.Clear();
+                return false;
+            }
+
+            var value = GetPropertyValue(source, fieldName);
+            if (value is null || IsDefaultValue(value))
+            {
+                values.Clear();
+                return false;
+            }
+
+            values[fieldName] = value;
+        }
+
+        return values.Count == fields.Count;
+    }
+
+    private static object? GetPropertyValue(object target, string name)
+    {
+        var type = target.GetType();
+        var prop = type.GetProperty(name, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+        if (prop is not null)
+        {
+            return prop.GetValue(target);
+        }
+
+        if (target is IReadOnlyDictionary<string, object?> roDict)
+        {
+            if (roDict.TryGetValue(name, out var value))
+            {
+                return value;
+            }
+
+            foreach (var kvp in roDict)
+            {
+                if (string.Equals(kvp.Key, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    return kvp.Value;
+                }
+            }
+        }
+
+        if (target is IDictionary<string, object?> dict)
+        {
+            if (dict.TryGetValue(name, out var value))
+            {
+                return value;
+            }
+
+            foreach (var kvp in dict)
+            {
+                if (string.Equals(kvp.Key, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    return kvp.Value;
+                }
+            }
+        }
+
+        if (target is System.Collections.IDictionary legacyDict)
+        {
+            foreach (System.Collections.DictionaryEntry entry in legacyDict)
+            {
+                if (entry.Key is string key && string.Equals(key, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    return entry.Value;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static IReadOnlyList<UniqueKeyDescriptor> EnumerateUniqueFieldSets(ModelMetadata meta)
+    {
+        var result = new List<UniqueKeyDescriptor>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (meta.PrimaryKey is { Fields.Count: > 0 } pk)
+        {
+            TryAddUniqueDescriptor(result, seen, pk.Fields, name: null);
+        }
+
+        foreach (var unique in meta.UniqueConstraints.Where(u => u.Fields.Count > 0))
+        {
+            TryAddUniqueDescriptor(result, seen, unique.Fields, unique.Name);
+        }
+
+        return result;
+    }
+
+    private static void TryAddUniqueDescriptor(List<UniqueKeyDescriptor> result, HashSet<string> seen, IReadOnlyList<string> fields, string? name)
+    {
+        var key = string.Join("|", fields).ToLowerInvariant();
+        if (!seen.Add(key))
+        {
+            return;
+        }
+
+        result.Add(new UniqueKeyDescriptor(fields, name));
+    }
+
+    private static string BuildCompositeSelectorPropertyName(IReadOnlyList<string> fields, string? explicitName)
+    {
+        if (!string.IsNullOrWhiteSpace(explicitName))
+        {
+            return $"By{ToPascalIdentifier(explicitName!)}";
+        }
+
+        return $"By{string.Join("And", fields.Select(ToPascalIdentifier))}";
+    }
+
+    private static string ToPascalIdentifier(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return "Key";
+        }
+
+        var parts = raw
+            .Split(new[] { '_', '-', ' ', '.', ':', ';', '/', '\\', ',', '(', ')', '[', ']' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => p.Trim())
+            .Where(p => p.Length > 0)
+            .ToArray();
+
+        if (parts.Length == 0)
+        {
+            return "Key";
+        }
+
+        var pascal = string.Concat(parts.Select(p => char.ToUpperInvariant(p[0]) + p[1..]));
+        if (!char.IsLetter(pascal[0]) && pascal[0] != '_')
+        {
+            pascal = $"K{pascal}";
+        }
+
+        return pascal;
+    }
+
+    private static bool IsDefaultValue(object value)
+    {
+        var type = value.GetType();
+        if (!type.IsValueType)
+        {
+            return false;
+        }
+
+        return Equals(value, Activator.CreateInstance(type));
+    }
+
+    private bool IsUnsetValue(object? value, Type propertyType)
     {
         if (value is null)
         {
@@ -923,7 +1132,7 @@ public sealed partial class PostgresSqlExecutor
         return Equals(value, defaultValue);
     }
 
-    private static object? GenerateValueForUnsetPrimaryKey(Type propertyType)
+    private object? GenerateValueForUnsetPrimaryKey(Type propertyType)
     {
         var targetType = Nullable.GetUnderlyingType(propertyType) ?? propertyType;
         if (targetType == typeof(Guid))
@@ -934,7 +1143,7 @@ public sealed partial class PostgresSqlExecutor
         return null;
     }
 
-    private static Guid GenerateGuidV7()
+    private Guid GenerateGuidV7()
     {
         Span<byte> bytes = stackalloc byte[16];
         var unixTimeMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -953,14 +1162,14 @@ public sealed partial class PostgresSqlExecutor
         return new Guid(bytes);
     }
 
-    private static JsonElement ParseJsonDefault(string? raw)
+    private JsonElement ParseJsonDefault(string? raw)
     {
         var payload = string.IsNullOrWhiteSpace(raw) ? "null" : raw;
         using var doc = JsonDocument.Parse(payload);
         return doc.RootElement.Clone();
     }
 
-    private static object? ConvertStaticDefault(string? raw, Type propertyType)
+    private object? ConvertStaticDefault(string? raw, Type propertyType)
     {
         var targetType = Nullable.GetUnderlyingType(propertyType) ?? propertyType;
         if (targetType == typeof(string))
@@ -1175,7 +1384,7 @@ public sealed partial class PostgresSqlExecutor
         return string.Join(" AND ", clauses);
     }
 
-    private static string BuildScalarFilterClause(FieldMetadata field, object filterValue, List<NpgsqlParameter> parameters, ParameterContext paramCtx, string tableAlias)
+    private string BuildScalarFilterClause(FieldMetadata field, object filterValue, List<NpgsqlParameter> parameters, ParameterContext paramCtx, string tableAlias)
     {
         if (IsJsonClrType(field.ClrType))
         {
@@ -1299,7 +1508,7 @@ public sealed partial class PostgresSqlExecutor
         return string.Join(" AND ", clauses);
     }
 
-    private static string BuildJsonFilterClause(FieldMetadata field, object filterValue, List<NpgsqlParameter> parameters, ParameterContext paramCtx, string tableAlias)
+    private string BuildJsonFilterClause(FieldMetadata field, object filterValue, List<NpgsqlParameter> parameters, ParameterContext paramCtx, string tableAlias)
     {
         var column = $"\"{tableAlias}\".{QuoteIdentifier(field.Name)}";
 
@@ -1358,7 +1567,7 @@ public sealed partial class PostgresSqlExecutor
         return string.Join(" AND ", clauses);
     }
 
-    private static string BuildJsonPathFilterClause(string column, object pathFilter, List<NpgsqlParameter> parameters, ParameterContext paramCtx)
+    private string BuildJsonPathFilterClause(string column, object pathFilter, List<NpgsqlParameter> parameters, ParameterContext paramCtx)
     {
         var type = pathFilter.GetType();
         var segmentsObj = type.GetProperty("Segments")?.GetValue(pathFilter) as System.Collections.IEnumerable;
@@ -1411,7 +1620,7 @@ public sealed partial class PostgresSqlExecutor
         return string.Join(" AND ", clauses);
     }
 
-    private static string BuildJsonArrayFilterClause(string jsonExpr, object arrayFilter, List<NpgsqlParameter> parameters, ParameterContext paramCtx)
+    private string BuildJsonArrayFilterClause(string jsonExpr, object arrayFilter, List<NpgsqlParameter> parameters, ParameterContext paramCtx)
     {
         var type = arrayFilter.GetType();
         var clauses = new List<string>();
@@ -1490,7 +1699,7 @@ public sealed partial class PostgresSqlExecutor
         return string.Join(" AND ", clauses);
     }
 
-    private static string BuildJsonStringFilterClause(string column, IReadOnlyList<string> segments, object stringFilter, List<NpgsqlParameter> parameters, ParameterContext paramCtx)
+    private string BuildJsonStringFilterClause(string column, IReadOnlyList<string> segments, object stringFilter, List<NpgsqlParameter> parameters, ParameterContext paramCtx)
     {
         var textExpr = BuildJsonTextExpression(column, segments);
         var clauses = new List<string>();
@@ -1594,7 +1803,7 @@ public sealed partial class PostgresSqlExecutor
         return string.Join(" AND ", clauses);
     }
 
-    private static string BuildJsonPathExpression(string column, IReadOnlyList<string> segments)
+    private string BuildJsonPathExpression(string column, IReadOnlyList<string> segments)
     {
         if (segments.Count == 0)
         {
@@ -1604,13 +1813,13 @@ public sealed partial class PostgresSqlExecutor
         return $"{column} #> '{BuildPathLiteral(segments)}'";
     }
 
-    private static string BuildJsonTextExpression(string column, IReadOnlyList<string> segments)
+    private string BuildJsonTextExpression(string column, IReadOnlyList<string> segments)
     {
         var literal = BuildPathLiteral(segments);
         return $"{column} #>> '{literal}'";
     }
 
-    private static string BuildPathLiteral(IReadOnlyList<string> segments)
+    private string BuildPathLiteral(IReadOnlyList<string> segments)
     {
         if (segments.Count == 0)
         {
@@ -1628,7 +1837,7 @@ public sealed partial class PostgresSqlExecutor
         Sensitive
     }
 
-    private static StringComparisonModeValue ResolveStringMode(Type filterType, object instance)
+    private StringComparisonModeValue ResolveStringMode(Type filterType, object instance)
     {
         var prop = filterType.GetProperty("Mode", BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
         var value = prop?.GetValue(instance);
@@ -1646,7 +1855,7 @@ public sealed partial class PostgresSqlExecutor
         };
     }
 
-    private static (string Clause, object Pattern) ResolveStringLike(string column, string paramName, object? value, StringComparisonModeValue mode, bool wrapBoth, bool startsWith, bool endsWith)
+    private (string Clause, object Pattern) ResolveStringLike(string column, string paramName, object? value, StringComparisonModeValue mode, bool wrapBoth, bool startsWith, bool endsWith)
     {
         var op = mode == StringComparisonModeValue.Sensitive ? "LIKE" : "ILIKE";
         var raw = value?.ToString() ?? string.Empty;
@@ -1656,7 +1865,7 @@ public sealed partial class PostgresSqlExecutor
         return ($"{column} {op} {paramName}", pattern);
     }
 
-    private static (string Clause, object Parameter) BuildStringComparisonFragments(string column, string paramName, object? value, StringComparisonModeValue mode)
+    private (string Clause, object Parameter) BuildStringComparisonFragments(string column, string paramName, object? value, StringComparisonModeValue mode)
     {
         if (mode == StringComparisonModeValue.Sensitive)
         {
@@ -1666,14 +1875,14 @@ public sealed partial class PostgresSqlExecutor
         return ($"{column} ILIKE {paramName}", value ?? string.Empty);
     }
 
-    private static string WrapArrayPayload(object? value)
+    private string WrapArrayPayload(object? value)
     {
         var element = ExtractJsonElement(value);
         var raw = element.ValueKind == JsonValueKind.Undefined ? "null" : element.GetRawText();
         return "[" + raw + "]";
     }
 
-    private static string BuildArrayPayload(System.Collections.IEnumerable values)
+    private string BuildArrayPayload(System.Collections.IEnumerable values)
     {
         var parts = new List<string>();
         foreach (var val in values)
@@ -1734,7 +1943,7 @@ public sealed partial class PostgresSqlExecutor
         return string.Empty;
     }
 
-    private static string BuildExistsClause(ModelMetadata childMeta, RelationMapping mapping, string parentAlias, string childAlias, string childWhere, bool negate, bool rawCondition = false)
+    private string BuildExistsClause(ModelMetadata childMeta, RelationMapping mapping, string parentAlias, string childAlias, string childWhere, bool negate, bool rawCondition = false)
     {
         var joinCondition = BuildJoinCondition(mapping, parentAlias, childAlias);
         var condition = string.IsNullOrWhiteSpace(childWhere)
@@ -1745,13 +1954,13 @@ public sealed partial class PostgresSqlExecutor
         return negate ? $"NOT EXISTS ({subquery})" : $"EXISTS ({subquery})";
     }
 
-    private static string BuildJoinCondition(RelationMapping mapping, string parentAlias, string childAlias)
+    private string BuildJoinCondition(RelationMapping mapping, string parentAlias, string childAlias)
     {
         var comparisons = mapping.ParentColumns.Zip(mapping.ChildColumns, (p, c) => $"\"{parentAlias}\".{QuoteIdentifier(p)} = \"{childAlias}\".{QuoteIdentifier(c)}");
         return string.Join(" AND ", comparisons);
     }
 
-    private static Dictionary<string, object?> ExtractPrimaryKeyValues(ModelMetadata meta, object instance)
+    private Dictionary<string, object?> ExtractPrimaryKeyValues(ModelMetadata meta, object instance)
     {
         if (meta.PrimaryKey is null)
         {
@@ -1774,7 +1983,7 @@ public sealed partial class PostgresSqlExecutor
         return values;
     }
 
-    private static ForeignKeyMetadata ResolveChildForeignKey(ModelMetadata parentMeta, ModelMetadata childMeta, FieldMetadata relationField)
+    private ForeignKeyMetadata ResolveChildForeignKey(ModelMetadata parentMeta, ModelMetadata childMeta, FieldMetadata relationField)
     {
         var matches = childMeta.ForeignKeys
             .Where(fk => string.Equals(fk.PrincipalModel, parentMeta.Name, StringComparison.Ordinal)
@@ -1794,7 +2003,7 @@ public sealed partial class PostgresSqlExecutor
         return matches[0];
     }
 
-    private static void AppendFkPredicate(ForeignKeyMetadata fk, IReadOnlyDictionary<string, object?> parentPk, string alias, ParameterContext paramCtx, List<NpgsqlParameter> parameters, List<string> predicates)
+    private void AppendFkPredicate(ForeignKeyMetadata fk, IReadOnlyDictionary<string, object?> parentPk, string alias, ParameterContext paramCtx, List<NpgsqlParameter> parameters, List<string> predicates)
     {
         for (int i = 0; i < fk.LocalFields.Count; i++)
         {
@@ -1810,7 +2019,7 @@ public sealed partial class PostgresSqlExecutor
         }
     }
 
-    private static void AppendFkAssignments(ForeignKeyMetadata fk, IReadOnlyDictionary<string, object?> parentPk, ParameterContext paramCtx, List<NpgsqlParameter> parameters, List<string> assignments, bool setNull = false)
+    private void AppendFkAssignments(ForeignKeyMetadata fk, IReadOnlyDictionary<string, object?> parentPk, ParameterContext paramCtx, List<NpgsqlParameter> parameters, List<string> assignments, bool setNull = false)
     {
         for (int i = 0; i < fk.LocalFields.Count; i++)
         {
@@ -1826,7 +2035,7 @@ public sealed partial class PostgresSqlExecutor
         }
     }
 
-    private static bool FkAllowsNull(ForeignKeyMetadata fk, ModelMetadata childMeta)
+    private bool FkAllowsNull(ForeignKeyMetadata fk, ModelMetadata childMeta)
     {
         var nullableColumns = childMeta.Fields
             .Where(f => f.Kind == FieldKind.Scalar && fk.LocalFields.Contains(f.Name, StringComparer.Ordinal))
@@ -1835,7 +2044,7 @@ public sealed partial class PostgresSqlExecutor
         return fk.LocalFields.All(col => nullableColumns.TryGetValue(col, out var isNullable) && isNullable);
     }
 
-    private static (string Sql, List<NpgsqlParameter> Parameters, ParameterContext ParamCtx) BuildUpdateSet(ModelMetadata meta, object data, ParameterContext? ctx = null, bool allowEmpty = false)
+    private (string Sql, List<NpgsqlParameter> Parameters, ParameterContext ParamCtx) BuildUpdateSet(ModelMetadata meta, object data, ParameterContext? ctx = null, bool allowEmpty = false)
     {
         var parameters = new List<NpgsqlParameter>();
         var paramCtx = ctx ?? new ParameterContext();
@@ -1902,7 +2111,7 @@ public sealed partial class PostgresSqlExecutor
         return (string.Join(", ", assignments), parameters, paramCtx);
     }
 
-    private static (IReadOnlyList<string> Columns, List<NpgsqlParameter> Parameters) BuildInsertColumns(ModelMetadata meta, object data, ParameterContext? ctx = null, Dictionary<string, object?>? overrideScalars = null)
+    private (IReadOnlyList<string> Columns, List<NpgsqlParameter> Parameters) BuildInsertColumns(ModelMetadata meta, object data, ParameterContext? ctx = null, Dictionary<string, object?>? overrideScalars = null)
     {
         var columns = new List<string>();
         var parameters = new List<NpgsqlParameter>();
@@ -2027,7 +2236,7 @@ public sealed partial class PostgresSqlExecutor
         return string.Join(", ", terms.Select(t => $"{t.Expression} {t.Direction}"));
     }
 
-    private static void AppendStableTieBreaker(ModelMetadata meta, string tableAlias, List<OrderTerm> terms)
+    private void AppendStableTieBreaker(ModelMetadata meta, string tableAlias, List<OrderTerm> terms)
     {
         if (meta.PrimaryKey is null || meta.PrimaryKey.Fields.Count == 0)
         {
@@ -2105,23 +2314,23 @@ public sealed partial class PostgresSqlExecutor
         return projectedTerms;
     }
 
-    private static string ResolveSortDirection(object value)
+    private string ResolveSortDirection(object value)
     {
         var order = value.ToString();
         return string.Equals(order, "Desc", StringComparison.OrdinalIgnoreCase) ? "DESC" : "ASC";
     }
 
-    private static string BuildTypeMismatchMessage(Type expected, Type actual, QueryModel query)
+    private string BuildTypeMismatchMessage(Type expected, Type actual, QueryModel query)
     {
         return $"Expected result of type '{expected.FullName}' for {query.Type} on model '{query.ModelName}', but received '{actual.FullName}'.";
     }
 
-    private static string BuildNullResultMessage(Type expected, QueryModel query)
+    private string BuildNullResultMessage(Type expected, QueryModel query)
     {
         return $"Expected result of type '{expected.FullName}' for {query.Type} on model '{query.ModelName}', but received null.";
     }
 
-    private static IReadOnlyList<T> CastToReadOnlyList<T>(object? result, QueryModel query)
+    private IReadOnlyList<T> CastToReadOnlyList<T>(object? result, QueryModel query)
     {
         if (result is IReadOnlyList<T> readOnly)
         {
@@ -2152,7 +2361,7 @@ public sealed partial class PostgresSqlExecutor
             : BuildTypeMismatchMessage(typeof(IReadOnlyList<T>), result.GetType(), query));
     }
 
-    private static void MaterializeRow(ModelMetadata meta, IDataRecord reader, object instance)
+    private void MaterializeRow(ModelMetadata meta, IDataRecord reader, object instance)
     {
         var type = instance.GetType();
         for (int i = 0; i < reader.FieldCount; i++)
@@ -2168,7 +2377,7 @@ public sealed partial class PostgresSqlExecutor
         }
     }
 
-    private static void MaterializeInto(ModelMetadata meta, IDataRecord reader, object instance, string prefix)
+    private void MaterializeInto(ModelMetadata meta, IDataRecord reader, object instance, string prefix)
     {
         var type = instance.GetType();
         foreach (var field in meta.Fields.Where(f => f.Kind == FieldKind.Scalar))
@@ -2190,7 +2399,7 @@ public sealed partial class PostgresSqlExecutor
         }
     }
 
-    private static void SetScalarProperty(PropertyInfo prop, object instance, IDataRecord reader, int ordinal)
+    private void SetScalarProperty(PropertyInfo prop, object instance, IDataRecord reader, int ordinal)
     {
         var value = reader.IsDBNull(ordinal) ? null : reader.GetValue(ordinal);
         if (value is null)
@@ -2239,27 +2448,27 @@ public sealed partial class PostgresSqlExecutor
         }
     }
 
-    private static bool IsSimpleValue(object value)
+    private bool IsSimpleValue(object value)
     {
         return value is string || value.GetType().IsValueType || value is Guid;
     }
 
-    private static bool IsJsonClrType(string? clrType)
+    private bool IsJsonClrType(string? clrType)
     {
         return clrType is not null && (clrType.Equals("Json", StringComparison.Ordinal) || clrType.Equals("JsonElement", StringComparison.Ordinal));
     }
 
-    private static bool IsStringClrType(string? clrType)
+    private bool IsStringClrType(string? clrType)
     {
         return clrType is not null && clrType.Equals("string", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsJsonWrapperType(Type targetType)
+    private bool IsJsonWrapperType(Type targetType)
     {
         return IsJsonClrType(targetType.Name) || targetType.FullName?.EndsWith(".Json.Json", StringComparison.Ordinal) == true;
     }
 
-    private static bool IsJsonValue(object? value)
+    private bool IsJsonValue(object? value)
     {
         if (value is null)
         {
@@ -2269,7 +2478,7 @@ public sealed partial class PostgresSqlExecutor
         return value is JsonElement || IsJsonWrapperType(value.GetType());
     }
 
-    private static JsonElement ExtractJsonElement(object? value)
+    private JsonElement ExtractJsonElement(object? value)
     {
         if (value is null)
         {
@@ -2297,7 +2506,7 @@ public sealed partial class PostgresSqlExecutor
         return JsonSerializer.SerializeToElement(value);
     }
 
-    private static string? ExtractJsonRawText(object? value)
+    private string? ExtractJsonRawText(object? value)
     {
         if (value is null)
         {
@@ -2347,7 +2556,7 @@ public sealed partial class PostgresSqlExecutor
         return JsonSerializer.Serialize(value);
     }
 
-    private static object CreateJsonWrapper(Type targetType, JsonElement element)
+    private object CreateJsonWrapper(Type targetType, JsonElement element)
     {
         var ctor = targetType.GetConstructor(new[] { typeof(JsonElement) });
         if (ctor is not null)
@@ -2368,7 +2577,7 @@ public sealed partial class PostgresSqlExecutor
         return element;
     }
 
-    private static object? GetParameterValue(object? value)
+    private object? GetParameterValue(object? value)
     {
         if (value is Enum enumValue)
         {
@@ -2378,7 +2587,7 @@ public sealed partial class PostgresSqlExecutor
         return value ?? DBNull.Value;
     }
 
-    private static NpgsqlParameter CreateParameter(string name, object? value, string? clrType = null)
+    private NpgsqlParameter CreateParameter(string name, object? value, string? clrType = null)
     {
         // JSON requires explicit typing and serialization for pg jsonb columns.
         if (IsJsonClrType(clrType) || IsJsonValue(value))
@@ -2401,7 +2610,7 @@ public sealed partial class PostgresSqlExecutor
         return param;
     }
 
-    private static bool IsEnumClrType(string clrType)
+    private bool IsEnumClrType(string clrType)
     {
         return clrType switch
         {
@@ -2410,7 +2619,7 @@ public sealed partial class PostgresSqlExecutor
         };
     }
 
-    private static string ToPgEnumTypeName(string clrType)
+    private string ToPgEnumTypeName(string clrType)
     {
         var sb = new StringBuilder();
         for (int i = 0; i < clrType.Length; i++)
@@ -2425,7 +2634,7 @@ public sealed partial class PostgresSqlExecutor
         return sb.ToString();
     }
 
-    private static void EnsureIncludeNotProvided(object? include)
+    private void EnsureIncludeNotProvided(object? include)
     {
         if (include is not null)
         {
@@ -2433,7 +2642,7 @@ public sealed partial class PostgresSqlExecutor
         }
     }
 
-    private static void EnsureNoRelationWrites(ModelMetadata meta, object data)
+    private void EnsureNoRelationWrites(ModelMetadata meta, object data)
     {
         foreach (var field in meta.Fields.Where(f => f.Kind == FieldKind.Relation))
         {
@@ -2450,7 +2659,7 @@ public sealed partial class PostgresSqlExecutor
         }
     }
 
-    private static IReadOnlyDictionary<string, ModelMetadata> LoadMetadata(string rootNamespace, Assembly assembly)
+    private IReadOnlyDictionary<string, ModelMetadata> LoadMetadata(string rootNamespace, Assembly assembly)
     {
         var registryType = assembly.GetType($"{rootNamespace}.Metadata.ModelMetadataRegistry");
         if (registryType is null)
@@ -2465,13 +2674,21 @@ public sealed partial class PostgresSqlExecutor
         return registry;
     }
 
-    private static string QuoteIdentifier(string identifier)
+    private string QuoteIdentifier(string identifier)
     {
         var folded = _preserveIdentifierCasing ? identifier : identifier.ToLowerInvariant();
         return $"\"{folded}\"";
     }
 
     private sealed record RelationMapping(IReadOnlyList<string> ParentColumns, IReadOnlyList<string> ChildColumns);
+
+    private sealed record UniqueKeyDescriptor(IReadOnlyList<string> Fields, string? Name)
+    {
+        public string Key => string.Join("|", Fields);
+        public string DisplayName => Name is null ? string.Join(", ", Fields) : Name;
+    }
+
+    private sealed record UniqueSelectorCandidate(UniqueKeyDescriptor Key, Dictionary<string, object> Values);
 
     private sealed record RelationForeignKey(ForeignKeyOwner Owner, ForeignKeyMetadata ForeignKey);
 
