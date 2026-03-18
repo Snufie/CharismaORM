@@ -1,9 +1,11 @@
 using System;
+using System.IO;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Charisma.Migration;
 using Charisma.Migration.Postgres;
+using Charisma.Parser;
 using Charisma.QueryEngine.Execution;
 using Charisma.Schema;
 
@@ -83,6 +85,29 @@ public sealed class CharismaRuntime : IDisposable
         var runner = new PostgresMigrationRunner(_connectionString);
         await runner.ExecuteAsync(plan, migrationOptions, cancellationToken).ConfigureAwait(false);
         return plan;
+    }
+
+    /// <summary>
+    /// Loads `schema.charisma` (or the supplied path), parses it, and runs migration.
+    /// This overload is intended for application authors: users should not supply a CharismaSchema instance.
+    /// </summary>
+    /// <param name="schemaPath">Path to schema file. Defaults to `schema.charisma` in current directory.</param>
+    /// <param name="options">Optional migration options.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public async Task<MigrationPlan> MigrateAsync(
+        string? schemaPath = "schema.charisma",
+        PostgresMigrationOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        var path = string.IsNullOrWhiteSpace(schemaPath) ? "schema.charisma" : schemaPath;
+        if (!File.Exists(path))
+            throw new FileNotFoundException("Schema file not found.", path);
+
+        var schemaText = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+        var parser = new RoslynSchemaParser();
+        var schema = parser.Parse(schemaText);
+
+        return await MigrateAsync(schema, options, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

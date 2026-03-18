@@ -1,49 +1,38 @@
 # JSON Fields
 
-CharismaORM has a dedicated runtime `Json` wrapper and query planner support for JSON operations.
+Charisma provides a runtime `Json` wrapper type and planner/executor support for JSON operations. This page documents the runtime type, common usage, and safety guidance.
 
-## Runtime JSON Type
+## Runtime `Json` type
 
-Defined at `src/Charisma.Runtime/Json/Json.cs`.
+Location: `src/Charisma.Runtime/Json/Json.cs`.
 
-Key features:
+Key behaviors:
 
-- wraps `JsonElement`
-- parse from raw string via `Json.Parse(...)`
-- serialize object via `Json.FromObject(...)`
-- custom converter for clean serialization behavior
-- value equality based on normalized raw JSON text
+- Wraps `JsonElement` and provides `Parse`/`FromObject` helpers.
+- Normalizes JSON text for deterministic equality and hashing.
+- Includes a custom converter to integrate with the generated models and the serializer used by the runtime.
 
-## Example Usage
+Example usage
 
 ```csharp
-var payload = Json.Parse("{""status"":""ok""}");
+var payload = Json.Parse("{\"status\":\"ok\"}");
 
 var created = await client.Commando.CreateAsync(new CommandoCreateArgs
 {
-    Data = new CommandoCreateInput
-    {
-        Payload = payload
-    }
+    Data = new CommandoCreateInput { Payload = payload }
 });
 ```
 
-## Planner JSON Filters
+## Planner interaction
 
-JSON filter support includes patterns such as:
+The query planner understands JSON filters (see `json-filtering.md`) and translates high-level predicates to provider JSONB expressions for Postgres.
 
-- path navigation
-- string filter over extracted path text
-- array predicates (`Has`, `HasEvery`, `HasSome`, length/empty checks)
+## Safety and performance
 
-These are translated to PostgreSQL JSONB expressions in planner/executor code.
+- JSON values used in filters are always parameterized.
+- For frequent JSON queries, create appropriate indexes (GIN on `jsonb`) and review explain plans.
 
-## Safety Notes
-
-- JSON filter payload values are parameterized.
-- JSON path literal construction includes escaping safeguards.
-
-## Testing References
+## Tests
 
 - `tests/Charisma.QueryEngine.Tests/QueryPlannerJsonTests.cs`
 - `tests/Charisma.QueryEngine.Tests/JsonFilterPlannerTests.cs`

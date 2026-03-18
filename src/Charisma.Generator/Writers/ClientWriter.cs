@@ -68,7 +68,6 @@ internal sealed class ClientWriter : IWriter
             BuildConstructor(),
             BuildInternalConstructor(),
             BuildMigrateFromSchemaPathMethod(),
-            BuildMigrateMethod(),
             BuildDispose()
         };
 
@@ -190,36 +189,7 @@ internal sealed class ClientWriter : IWriter
                 "The computed migration plan that was applied (or empty when already in sync)."));
     }
 
-    /// <summary>
-    /// Builds a startup migration helper that proxies to the runtime.
-    /// </summary>
-    private static MethodDeclarationSyntax BuildMigrateMethod()
-    {
-        return SyntaxFactory.MethodDeclaration(
-                SyntaxFactory.ParseTypeName("Task<MigrationPlan>"),
-                "MigrateAsync")
-            .AddModifiers(SyntaxFactory.Token(SyntaxKind.PublicKeyword), SyntaxFactory.Token(SyntaxKind.AsyncKeyword))
-            .AddParameterListParameters(
-                SyntaxFactory.Parameter(SyntaxFactory.Identifier("schema"))
-                    .WithType(SyntaxFactory.IdentifierName("CharismaSchema")),
-                SyntaxFactory.Parameter(SyntaxFactory.Identifier("options"))
-                    .WithType(SyntaxFactory.ParseTypeName("PostgresMigrationOptions?"))
-                    .WithDefault(SyntaxFactory.EqualsValueClause(SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression))),
-                SyntaxFactory.Parameter(SyntaxFactory.Identifier("ct"))
-                    .WithType(SyntaxFactory.ParseTypeName("CancellationToken"))
-                    .WithDefault(SyntaxFactory.EqualsValueClause(SyntaxFactory.IdentifierName("default"))))
-            .WithBody(SyntaxFactory.Block(
-                SyntaxFactory.ParseStatement("return await _runtime.MigrateAsync(schema, options, ct).ConfigureAwait(false);")))
-            .WithLeadingTrivia(BuildDoc(
-                "Plans and applies database migrations for the supplied schema.",
-                new[]
-                {
-                    ("schema", "Target schema definition to apply."),
-                    ("options", "Optional migration safety options."),
-                    ("ct", "Cancellation token for the async operation.")
-                },
-                "The computed migration plan that was applied (or empty when already in sync)."));
-    }
+    // Removed CharismaSchema-based MigrateAsync overload to avoid exposing internal IR types to application authors.
 
     /// <summary>
     /// Emits read-only delegate properties for each model.

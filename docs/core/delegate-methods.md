@@ -1,68 +1,86 @@
 # Charisma Delegate Methods
 
-Charisma generates a rich set of methods for each model delegate. Below is a complete list with signatures and usage examples.
+The generator emits a strongly-typed delegate for each model (for example `client.Post` or `client.Robot`). Delegates provide commonly-used async methods for CRUD, queries, aggregates and convenience accessors. Below are the typical method shapes and examples you can expect from generated code.
 
-## CRUD & Query Methods
+## Typical method patterns
 
-## FindById & FindBy\* Methods
+- FindUnique / FindUniqueAsync
+- FindFirst / FindFirstAsync / FindFirstOrThrowAsync
+- FindMany / FindManyAsync
+- Create / CreateAsync
+- CreateMany / CreateManyAsync
+- Update / UpdateAsync
+- UpdateMany / UpdateManyAsync
+- Delete / DeleteAsync
+- DeleteMany / DeleteManyAsync
+- Count / CountAsync
+- Exists / ExistsAsync
+- GroupBy / GroupByAsync
 
-## Convenience Methods
+All async methods follow `Task<T>` or `Task` return shapes. The generator produces `*Args` types for object-style calls and convenience lambda overloads for inline expressions where possible.
 
-## Usage Example
+## Example signatures (patterns)
 
-```csharp
-var robot = await client.Robot.FindByIdAsync(Guid.Parse("..."));
-var exists = await client.Robot.ExistsAsync(r => r.Name == "R-001");
-var count = await client.Robot.CountAsync(r => r.Status == RobotStatus.Active);
-```
+- `Task<T?> FindUniqueAsync(TUniqueArgs args)`
+- `Task<T?> FindFirstAsync(TFindFirstArgs args)`
+- `Task<IEnumerable<T>> FindManyAsync(TFindManyArgs args)`
+- `Task<T> CreateAsync(TCreateArgs args)`
+- `Task<int> CreateManyAsync(TCreateManyArgs args)`
+- `Task<T> UpdateAsync(TUpdateArgs args)`
+- `Task<int> UpdateManyAsync(TUpdateManyArgs args)`
+- `Task<T> DeleteAsync(TDeleteArgs args)`
+- `Task<int> DeleteManyAsync(TDeleteManyArgs args)`
+- `Task<int> CountAsync(TCountArgs args)`
+- `Task<bool> ExistsAsync(TExistsArgs args)`
+- `Task<IEnumerable<GroupResult>> GroupByAsync(TGroupByArgs args)`
 
-## Method Signatures
+These signatures are patterns rather than literal type names — check the generated client headers for exact type names like `PostFindManyArgs`, `RobotWhere`, etc.
 
-All methods are async and return `Task` or `Task<T>`. See generated code headers for full signatures and overloads.
+## Usage examples
 
-## Troubleshooting & Best Practices
-
-- Always check for null when using `FindFirst`/`FindUnique`.
-- Use `FindFirstOrThrow` for strict existence checks.
-- Prefer filter lambdas for simple queries, filter objects for complex conditions.
-- Use projections to minimize data transfer.
-- For composite keys, use `FindByCompositeAsync` or custom `FindBy*` methods.
-
-## Advanced Usage Examples
-
-### Find by composite key
-
-```csharp
-var robot = await client.Robot.FindByCompositeAsync((serial, batch));
-```
-
-### Filtering and projection
-
-```csharp
-var robots = await client.Robot.FindManyAsync(r => r.Status == RobotStatus.Active, select: r => new { r.Name, r.CreatedAt });
-```
-
-### Including related data
+Basic find:
 
 ```csharp
-var robots = await client.Robot.FindManyAsync(include: r => r.Tasks);
+var post = await client.Post.FindUniqueAsync(new PostFindUniqueArgs { Where = new PostWhereUnique { Id = id } });
 ```
 
-### Exists and Count
+Find many with filters and projection:
 
 ```csharp
-bool exists = await client.Robot.ExistsAsync(r => r.Name == "R-001");
-int count = await client.Robot.CountAsync(r => r.Status == RobotStatus.Active);
+var recent = await client.Post.FindManyAsync(new PostFindManyArgs {
+ Where = new PostWhere { Published = new BoolFilter { Equals = true } },
+ OrderBy = new[] { new PostOrderBy { CreatedAt = OrderByDirection.Desc } },
+ Take = 10,
+ Select = new PostSelect { Id = true, Title = true }
+});
 ```
 
-### Aggregate and GroupBy
+Exists / Count convenience:
 
 ```csharp
-var stats = await client.Robot.GroupByAsync(new GroupByArgs { By = new[] { "Status" }, Aggregates = ... });
+bool hasActive = await client.Robot.ExistsAsync(new RobotExistsArgs { Where = new RobotWhere { Status = new EnumFilter<RobotStatus> { Equals = RobotStatus.Active } } });
+int total = await client.Robot.CountAsync(new RobotCountArgs { Where = new RobotWhere { OwnerId = new StringFilter { Equals = ownerId } } });
 ```
 
-## See Also
+GroupBy example:
 
+```csharp
+var stats = await client.Robot.GroupByAsync(new RobotGroupByArgs {
+ By = new[] { "Status" },
+ Aggregates = new RobotAggregates { Count = true }
+});
+```
+
+## Best practices
+
+- Prefer projection (`Select`) to reduce data transfer for wide models.
+- Use `FindUnique` when you have a unique key; it provides clearer intent and helps the planner.
+- Use `Exists` for presence checks instead of performing a full `Find`.
+- For complex filters, construct the `*Where` object form rather than large inline lambda expressions — it maps more directly to planner tests and errors.
+
+## See also
+
+- [Querying Data](queries.md)
 - [Query Features](query-features.md)
 - [Sugar Methods](sugar-methods.md)
 - [Transactions](transactions-full.md)

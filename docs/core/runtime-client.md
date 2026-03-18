@@ -1,130 +1,85 @@
 # Runtime Client
 
-The runtime composes your generated client with provider-specific execution logic.
+The runtime composes your generated client with provider-specific execution logic and exposes helpers for migrations, transactions and programmatic execution.
 
-## Core Types
+## Core types
 
 - `CharismaRuntime` (`src/Charisma.Runtime/CharismaRuntime.cs`)
 - `CharismaRuntimeOptions` (`src/Charisma.Runtime/CharismaRuntimeOptions.cs`)
 - `ProviderOptions` (`src/Charisma.Runtime/ProviderOptions.cs`)
 
-## Minimal Setup
+## Minimal construction
 
 ```csharp
 var options = new CharismaRuntimeOptions
 {
-    ConnectionString = "Host=localhost;Database=mydb;Username=postgres;Password=postgres",
-    RootNamespace = "MyApp.Generated",
-    Provider = ProviderOptions.PostgreSQL
+  ConnectionString = "Host=localhost;Database=mydb;Username=postgres;Password=postgres",
+  RootNamespace = "MyApp.Generated",
+  Provider = ProviderOptions.PostgreSQL
 };
 
 using var client = new CharismaClient(options);
 ```
 
-## Required vs Optional Options
+### Required vs optional options
 
-Required (current default path):
+- Required: `ConnectionString` (unless you provide a custom `ConnectionProvider`), `RootNamespace`.
+- Optional: `ConnectionProvider`, `GeneratedAssembly`, `MetadataRegistry`, `ModelTypeResolver`, `PreserveIdentifierCasing`, `MaxNestingDepth`, `GlobalOmit`.
 
-- `ConnectionString` (unless custom `ConnectionProvider` is supplied)
-- `RootNamespace`
+## Dependency injection (ASP.NET)
 
-Optional:
-
-- `ConnectionProvider`
-- `GeneratedAssembly`
-- `MetadataRegistry`
-- `ModelTypeResolver`
-- `PreserveIdentifierCasing`
-- `MaxNestingDepth`
-- `GlobalOmit`
-
-## Runtime Internals
-
-At construction time, runtime:
-
-- validates options
-- chooses provider executor (PostgreSQL currently)
-- wires metadata/type resolution hooks
-
-Generated delegates then call executor methods via query model objects.
-
-## Disposal Behavior
-
-`CharismaRuntime` disposes:
-
-- executor resources
-- owned connection provider resources (if runtime created the provider)
-
-This includes sync/async disposal paths.
-
-## Global Omit and Casing
-
-- `GlobalOmit` lets you define default omitted fields by model.
-- `PreserveIdentifierCasing` controls identifier folding behavior in SQL planning.
-
-## Common Misconfiguration Issues
-
-- `RootNamespace` mismatch with generated assembly namespace
-- wrong connection string source
-- missing generated assembly when not using entry assembly defaults
-
-## Startup Migration (ASP.NET)
-
-You can now run migrations manually during app startup before `app.Run()`.
-
-One-liner path (recommended):
+Recommended pattern: register options and `CharismaClient` so you can inject `CharismaClient` into controllers or services:
 
 ```csharp
-using (var client = new CharismaClient(new CharismaRuntimeOptions
-{
-    ConnectionString = builder.Configuration.GetConnectionString("Default")!,
-    RootNamespace = "MyApp.Generated",
-    Provider = ProviderOptions.PostgreSQL
-}))
-{
-    await client.MigrateAsync("schema.charisma");
-}
-```
+builder.Services.AddSingleton(new CharismaRuntimeOptions {
+  ConnectionString = builder.Configuration.GetConnectionString("Default"),
+  RootNamespace = "MyApp.Generated",
+  Provider = ProviderOptions.PostgreSQL
+});
 
-Advanced path (explicit parsed schema + safety options):
-
-```csharp
-using Charisma.Migration.Postgres;
-using Charisma.Parser;
-using MyApp.Generated;
-
-var builder = WebApplication.CreateBuilder(args);
-
-var app = builder.Build();
-
-var schemaText = await File.ReadAllTextAsync("schema.charisma");
-var schema = new RoslynSchemaParser().Parse(schemaText);
-
-using (var client = new CharismaClient(new CharismaRuntimeOptions
-{
-    ConnectionString = builder.Configuration.GetConnectionString("Default")!,
-    RootNamespace = "MyApp.Generated",
-    Provider = ProviderOptions.PostgreSQL
-}))
-{
-    await client.MigrateAsync(
-        schema,
-        new PostgresMigrationOptions(allowDestructive: false, allowDataLoss: false));
-}
-
-app.Run();
+builder.Services.AddScoped(sp => new CharismaClient(sp.GetRequiredService<CharismaRuntimeOptions>()));
 ```
 
 Notes:
 
-- This keeps migration explicit and deterministic at startup.
-- For production, keep `allowDestructive` and `allowDataLoss` false unless intentionally performing risky changes.
+- Register `CharismaClient` as `Scoped` to match typical DbContext lifetimes in web apps.
+- If you prefer a single shared client, register as `Singleton`, but ensure connection provider is thread-safe.
 
-## How to Debug Setup Problems
+## Startup migration patterns
 
-Check in order:
+Prefer an explicit controlled migration step at startup. The runtime provides a `MigrateAsync()` helper that can run migrations using `schema.charisma` discovered in the app working directory by default:
 
-1. generation namespace and output path
-2. runtime options
-3. assembly loading context
-4. planner/executor exceptions and SQLSTATE mapping
+```csharp
+// non-blocking safe startup example in Program.cs
+using var scope = app.Services.CreateScope();
+var client = scope.ServiceProvider.GetRequiredService<CharismaClient>();
+// await client.MigrateAsync(); // runs using schema.charisma in working dir
+
+// Or run with a short timeout to avoid delaying app start:
+var migrateTask = client.MigrateAsync();
+await Task.WhenAny(migrateTask, Task.Delay(TimeSpan.FromSeconds(15)));
+```
+
+If you require deterministic control over the schema used for migration (for example, using a specific schema file embedded in your release pipeline), pass an explicit schema path when calling the lower-level migration entrypoint (the runtime also supports programmatic schema parsing via `Charisma.Parser`).
+
+## Disposal and lifetimes
+
+`CharismaRuntime` disposes executor resources and any owned `ConnectionProvider`. The runtime supports both sync and async disposal patterns; when used in ASP.NET, prefer `Scoped` registration and rely on the DI container to dispose instances at the end of scope.
+
+## Transactions
+
+Use `client.TransactionAsync(async trx => { ... })` to run a transactional block that can contain arbitrary C# logic and multiple delegate calls. The runtime ensures atomicity and automatic rollback on exceptions; manual rollback APIs are also available on the transaction context.
+
+## Debugging and common misconfigurations
+
+Check in this order when debugging startup/runtime problems:
+
+1. generation namespace matches `RootNamespace` and the generated assembly is loaded.
+2. `ConnectionString` and `ConnectionProvider` are correct and reachable.
+3. `Provider` is set to the provider you generated code for (Postgres currently).
+4. planner/executor exceptions — inspect SQL and SQLSTATE codes.
+
+## Tips
+
+- Keep migrations explicit in CI pipelines and only run `MigrateAsync` in production under controlled conditions.
+- When testing locally, use a disposable test database or transactional test harness to avoid interfering with shared state.

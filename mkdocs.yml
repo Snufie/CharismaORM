@@ -9,7 +9,8 @@ nav:
       - Quickstart: getting-started/quickstart.md
       - First Steps: getting-started/first-steps.md
       - Mental Model: getting-started/mental-model.md
-  - Core Concepts:
+  - Core:
+      - Overview: core/index.md
       - Schema DSL: core/schema-dsl.md
       - Code Generation: core/generation.md
       - Runtime Client: core/runtime-client.md
@@ -20,6 +21,7 @@ nav:
       - CLI Reference: operations/cli.md
       - CLI Completion Roadmap: operations/cli-roadmap.md
       - Migrations and Introspection: operations/migrations.md
+      - Migrate CLI: operations/migrate-cli.md
       - Release Gates: operations/release-gates.md
   - Architecture:
       - Overview: architecture/overview.md

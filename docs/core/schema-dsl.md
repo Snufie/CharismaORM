@@ -113,16 +113,42 @@ These become typed structures in model metadata and influence query uniqueness, 
 
 ## Datasource and Generator Blocks
 
-`datasource` requires:
+### `datasource` block
 
-- `provider`
-- `url`
+The `datasource` block configures how the runtime and generator connect to your database. Minimal required keys:
 
-`generator` accepts key-value config, commonly:
+- `provider` — e.g. `"postgresql"`.
+- `url` — a connection string or `env("NAME")` reference.
 
-- `provider`
-- `output`
-- namespace-related config consumed by CLI/config resolution
+Example:
+
+```charisma
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+```
+
+Notes:
+
+- `env("NAME")` is resolved by the CLI/runtime using environment variables such as `CHARISMA_CONNECTION_STRING` and `DATABASE_URL`.
+
+### `generator` block
+
+The `generator` block contains config consumed by the code generator. Typical keys:
+
+- `provider` — generator identifier (e.g. `charisma-generator`).
+- `output` — path where generated code is written.
+- options such as `root_namespace` or format settings may be present.
+
+Example:
+
+```charisma
+generator client {
+  provider = "charisma-generator"
+  output = "./Generated"
+}
+```
 
 ## Normalization and Hashing
 

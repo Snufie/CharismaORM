@@ -1,36 +1,46 @@
-# Charisma Optional Lists
+# Optional Lists
 
-Charisma models can have optional lists, which are nullable collections.
+Optional lists are nullable collection fields (e.g., `String[]?`) and are useful when a distinction between "missing" and "empty" matters.
 
-## Why Optional Lists?
-
-- Some databases allow null for list fields (e.g., array columns).
-- Useful for representing missing or undefined relationships.
-- Enables flexible modeling of real-world data.
-
-## Example
+Schema example
 
 ```charisma
 model Robot {
+  id   Id @id @default(uuid())
   tags String[]? // Optional list of tags
 }
 ```
 
-## Usage in C\#
+C# usage
 
 ```csharp
-var robot = await client.Robot.FindByIdAsync(...);
-if (robot.Tags != null)
+var robot = await client.Robot.FindByIdAsync(new RobotFindUniqueArgs { Where = new RobotWhereUnique { Id = id } });
+if (robot.Tags == null)
 {
-    foreach (var tag in robot.Tags)
-    {
-        // ...
-    }
+  // tags are missing (null)
+}
+else if (robot.Tags.Length == 0)
+{
+  // tags are present but empty
+}
+else
+{
+  foreach (var t in robot.Tags) { /* ... */ }
 }
 ```
 
-## Tips
+Query patterns
 
-- Use optional lists for fields that may be missing or undefined.
-- Required lists use `Type[]` (non-nullable).
-- Required lists can still default to `[]` (empty list).
+- Check for null: `Where = new RobotWhere { Tags = new JsonFilter { IsNull = true } }` or use lambda helpers when available.
+- Check for empty vs non-empty: test `Length` if generator exposes it, or use array containment filters (e.g., `Has`/`HasSome`).
+
+Database and generator notes
+
+- Null vs empty semantics map to the underlying column nullability. On Postgres, a nullable `text[]` can be `NULL` or `ARRAY[]`.
+- The generator emits C# arrays and nullable annotations to reflect schema nullability.
+
+Best practices
+
+- Prefer `Type[]` (non-nullable) when the empty list is a valid default and you do not need to distinguish missing data.
+- Use optional lists when a missing value has business meaning distinct from an empty collection.
+- Document the chosen semantics for critical models to avoid surprises for API consumers.
