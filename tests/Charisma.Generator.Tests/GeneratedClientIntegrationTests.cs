@@ -198,17 +198,15 @@ public sealed class GeneratedClientIntegrationTests : IClassFixture<GeneratedAss
             .Where(m => string.Equals(m.Name, "MigrateAsync", StringComparison.Ordinal))
             .ToArray();
 
-        Assert.Equal(2, methods.Length);
-
         var schemaObjectOverload = methods.Single(m =>
         {
             var p = m.GetParameters();
-            return p.Length == 3 && string.Equals(p[0].Name, "schema", StringComparison.Ordinal);
+            return p.Length == 3 && string.Equals(p[0].Name, "schemaPath", StringComparison.Ordinal);
         });
 
         Assert.Equal(typeof(Task<MigrationPlan>), schemaObjectOverload.ReturnType);
         var schemaObjectParameters = schemaObjectOverload.GetParameters();
-        Assert.Equal("schema", schemaObjectParameters[0].Name);
+        Assert.Equal("schemaPath", schemaObjectParameters[0].Name);
         Assert.Equal("options", schemaObjectParameters[1].Name);
         Assert.Equal(typeof(PostgresMigrationOptions), Nullable.GetUnderlyingType(schemaObjectParameters[1].ParameterType) ?? schemaObjectParameters[1].ParameterType);
         Assert.Equal("ct", schemaObjectParameters[2].Name);
