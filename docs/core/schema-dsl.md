@@ -50,7 +50,6 @@ Implemented scalar set:
 - `Decimal`
 - `BigInt`
 - `UUID`
-- `Uuid`
 - `Id`
 
 ## Field Shapes
