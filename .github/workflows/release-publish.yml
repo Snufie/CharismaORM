@@ -154,7 +154,7 @@ jobs:
             --password "$TOKEN" \
             --store-password-in-clear-text
 
-          dotnet add package CharismaORM --version "${{ steps.version.outputs.version }}" --source github
+          dotnet add package CharismaORM --version "${{ steps.version.outputs.version }}" --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
           printf '%s\n' \
             'using System;' \
             'using Charisma.Runtime;' \
