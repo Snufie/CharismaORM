@@ -5,23 +5,28 @@
     <PackAsTool>false</PackAsTool>
     <PackageId>CharismaORM</PackageId>
     <Version>1.1.4</Version>
+    <CharismaPackageVersion Condition="'$(CharismaPackageVersion)' == ''">$(Version)</CharismaPackageVersion>
+    <UseNuGetPackagesForIntegration Condition="'$(UseNuGetPackagesForIntegration)' == ''">false</UseNuGetPackagesForIntegration>
     <Authors>Snufie</Authors>
     <Description>Charisma libraries bundled as a dotnet package.</Description>
     <PackIncludeSymbols>false</PackIncludeSymbols>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
   </PropertyGroup>
-  <!-- <ItemGroup>
+  <ItemGroup Condition="'$(UseNuGetPackagesForIntegration)' != 'true'">
     <ProjectReference Include="..\Charisma.Generator\Charisma.Generator.csproj" />
     <ProjectReference Include="..\Charisma.Migration\Charisma.Migration.csproj" />
     <ProjectReference Include="..\Charisma.Parser\Charisma.Parser.csproj" />
     <ProjectReference Include="..\Charisma.Runtime\Charisma.Runtime.csproj" />
     <ProjectReference Include="..\Charisma.Schema\Charisma.Schema.csproj" />
     <ProjectReference Include="..\Charisma.QueryEngine\Charisma.QueryEngine.csproj" />
-  </ItemGroup> -->
-  
-  <ItemGroup>
-    <PackageReference Include="Charisma.Runtime" Version="1.0.4" />
-    <PackageReference Include="Charisma.QueryEngine" Version="1.0.4" />
-    <PackageReference Include="Charisma.Schema" Version="1.0.4" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UseNuGetPackagesForIntegration)' == 'true'">
+    <PackageReference Include="Charisma.Runtime" Version="$(CharismaPackageVersion)" />
+    <PackageReference Include="Charisma.QueryEngine" Version="$(CharismaPackageVersion)" />
+    <PackageReference Include="Charisma.Schema" Version="$(CharismaPackageVersion)" />
+    <PackageReference Include="Charisma.Parser" Version="$(CharismaPackageVersion)" />
+    <PackageReference Include="Charisma.Generator" Version="$(CharismaPackageVersion)" />
+    <PackageReference Include="Charisma.Migration" Version="$(CharismaPackageVersion)" />
   </ItemGroup>
 </Project>
