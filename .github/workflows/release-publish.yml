@@ -109,6 +109,13 @@ jobs:
             dotnet nuget push "$pkg" --source github --api-key "$TOKEN" --skip-duplicate
           done
 
+      - name: NuGet.org login (Trusted Publishing)
+        if: ${{ !contains(steps.version.outputs.version, '-') }}
+        id: nuget_login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_ORG_USER || github.repository_owner }}
+
       - name: Publish to NuGet.org (stable only)
         shell: bash
         run: |
@@ -122,6 +129,7 @@ jobs:
 
           dotnet nuget push "artifacts/packages/*.nupkg" \
             --source https://api.nuget.org/v3/index.json \
+            --api-key "${{ steps.nuget_login.outputs.NUGET_API_KEY }}" \
             --skip-duplicate
 
       - name: NuGet consumer smoke test (private feed)
