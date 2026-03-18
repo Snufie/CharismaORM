@@ -199,7 +199,6 @@ Behavior:
 
 ### `charisma db push`
 
-````text
 # CharismaORM
 
 Schema-first, strongly typed ORM tooling for .NET with PostgreSQL query execution and migration support.
