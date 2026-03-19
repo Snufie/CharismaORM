@@ -74,13 +74,21 @@ internal sealed class FilterWriter : IWriter
                 SyntaxFactory.ParseName($"{_rootNamespace}.Filters"))
             .AddMembers(members.ToArray());
 
+        var usings = new List<UsingDirectiveSyntax>
+        {
+            SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System")),
+            SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System.Collections.Generic")),
+            SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System.Text.Json")),
+            SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("Charisma.Runtime"))
+        };
+
+        if (schema.Enums.Count > 0)
+        {
+            usings.Insert(usings.Count - 1, SyntaxFactory.UsingDirective(SyntaxFactory.ParseName($"{_rootNamespace}.Enums")));
+        }
+
         return SyntaxFactory.CompilationUnit()
-            .AddUsings(
-                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System")),
-                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System.Collections.Generic")),
-                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System.Text.Json")),
-                    SyntaxFactory.UsingDirective(SyntaxFactory.ParseName($"{_rootNamespace}.Enums")),
-                    SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("Charisma.Runtime")))
+            .AddUsings(usings.ToArray())
             .AddMembers(@namespace)
             .NormalizeWhitespace();
     }
@@ -502,7 +510,76 @@ internal sealed class FilterWriter : IWriter
             cls = cls.WithLeadingTrivia(BuildDoc(summary!));
         }
 
+        // Optionally add an implicit conversion operator for scalar/enum filters so callers
+        // can write `Field = value` instead of `Field = new XFilter { Equals = value }`.
+        var conv = BuildImplicitConversionOperatorForFilter(name);
+        if (conv is not null)
+        {
+            cls = cls.AddMembers(conv);
+        }
+
         return cls;
+    }
+
+    private static ConversionOperatorDeclarationSyntax? BuildImplicitConversionOperatorForFilter(string filterName)
+    {
+        // Map known scalar filter names to their CLR source type.
+        var map = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["StringFilter"] = "string",
+            ["IntFilter"] = "int",
+            ["FloatFilter"] = "double",
+            ["DecimalFilter"] = "decimal",
+            ["DateTimeFilter"] = "DateTime",
+            ["BoolFilter"] = "bool",
+            ["GuidFilter"] = "Guid",
+            ["BytesFilter"] = "byte[]"
+        };
+
+        if (map.TryGetValue(filterName, out var srcType))
+        {
+            return BuildConversionOperator(filterName, srcType);
+        }
+
+        // Enum filters are named {EnumName}Filter — support implicit from enum.
+        if (filterName.EndsWith("Filter", StringComparison.Ordinal) && filterName.Length > "Filter".Length)
+        {
+            var enumName = filterName.Substring(0, filterName.Length - "Filter".Length);
+            // generate implicit operator from enum to EnumFilter
+            return BuildConversionOperator(filterName, enumName);
+        }
+
+        return null;
+    }
+
+    private static ConversionOperatorDeclarationSyntax BuildConversionOperator(string targetFilterName, string sourceTypeName)
+    {
+        // public static implicit operator TargetFilter(SourceType v) => new TargetFilter { Equals = v };
+        var param = SyntaxFactory.Parameter(SyntaxFactory.Identifier("v")).WithType(SyntaxFactory.ParseTypeName(sourceTypeName));
+
+        var initializer = SyntaxFactory.InitializerExpression(
+            SyntaxKind.ObjectInitializerExpression,
+            SyntaxFactory.SeparatedList<ExpressionSyntax>(new ExpressionSyntax[]
+            {
+                SyntaxFactory.AssignmentExpression(
+                    SyntaxKind.SimpleAssignmentExpression,
+                    SyntaxFactory.IdentifierName("Equals"),
+                    SyntaxFactory.IdentifierName("v"))
+            }));
+
+        var creation = SyntaxFactory.ObjectCreationExpression(SyntaxFactory.ParseTypeName(targetFilterName))
+            .WithInitializer(initializer);
+
+        var conv = SyntaxFactory.ConversionOperatorDeclaration(
+                SyntaxFactory.TokenList(SyntaxFactory.Token(SyntaxKind.PublicKeyword), SyntaxFactory.Token(SyntaxKind.StaticKeyword)),
+                SyntaxFactory.Token(SyntaxKind.ImplicitKeyword),
+                SyntaxFactory.ParseTypeName(targetFilterName))
+            .WithParameterList(SyntaxFactory.ParameterList(SyntaxFactory.SingletonSeparatedList(param)))
+            .WithExpressionBody(SyntaxFactory.ArrowExpressionClause(creation))
+            .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken))
+            .WithLeadingTrivia(BuildDoc($"Implicit conversion from {sourceTypeName} to {targetFilterName} for shorthand filter assignment."));
+
+        return conv;
     }
 
     /// <summary>

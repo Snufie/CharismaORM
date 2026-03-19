@@ -519,7 +519,11 @@ public static class Program
 
         if (existingSchema is null || existingSchema.Datasources.Count == 0)
         {
-            Console.Error.WriteLine("No connection string found. Provide --connection, set CHARISMA_CONNECTION_STRING or DATABASE_URL, or use runtime options in your app.");
+            // Try user secrets (project user secrets) before giving up
+            var fromSecrets = TryGetConnectionFromUserSecrets();
+            if (!string.IsNullOrWhiteSpace(fromSecrets)) return fromSecrets;
+
+            Console.Error.WriteLine("No connection string found. Provide --connection, set CHARISMA_CONNECTION_STRING or DATABASE_URL, set user secrets, or use runtime options in your app.");
             return null;
         }
 
@@ -538,7 +542,150 @@ public static class Program
         if (url.StartsWith("\"", StringComparison.Ordinal) && url.EndsWith("\"", StringComparison.Ordinal))
             url = url.Substring(1, url.Length - 2);
 
+        // Support postgres URIs like: postgresql://user:pass@host:port/dbname?params
+        if (TryParsePostgresUri(url, out var npgsql))
+        {
+            return npgsql;
+        }
+
         return url;
+    }
+
+    private static string? TryGetConnectionFromUserSecrets()
+    {
+        try
+        {
+            // Find nearest .csproj upwards
+            var dir = Directory.GetCurrentDirectory();
+            while (!string.IsNullOrEmpty(dir))
+            {
+                var csproj = Directory.GetFiles(dir, "*.csproj").FirstOrDefault();
+                if (csproj != null)
+                {
+                    var doc = new System.Xml.XmlDocument();
+                    doc.Load(csproj);
+                    var ns = new System.Xml.XmlNamespaceManager(doc.NameTable);
+                    ns.AddNamespace("ms", "http://schemas.microsoft.com/developer/msbuild/2003");
+                    var node = doc.SelectSingleNode("//UserSecretsId") ?? doc.SelectSingleNode("//ms:UserSecretsId", ns);
+                    if (node != null)
+                    {
+                        var id = node.InnerText.Trim();
+                        if (!string.IsNullOrEmpty(id))
+                        {
+                            var secretsPath = GetUserSecretsFilePath(id);
+                            if (File.Exists(secretsPath))
+                            {
+                                var json = File.ReadAllText(secretsPath);
+                                using var docJson = System.Text.Json.JsonDocument.Parse(json);
+                                // common keys to check
+                                if (TryGetJsonString(docJson, new[] { "ConnectionStrings", "Default" }, out var cs)) return cs;
+                                if (TryGetJsonString(docJson, new[] { "Charisma", "ConnectionString" }, out cs)) return cs;
+                                if (TryGetJsonString(docJson, new[] { "CHARISMA_CONNECTION_STRING" }, out cs)) return cs;
+                                if (TryGetJsonString(docJson, new[] { "ConnectionString" }, out cs)) return cs;
+                            }
+                        }
+                    }
+                }
+
+                var parent = Directory.GetParent(dir);
+                dir = parent?.FullName ?? string.Empty;
+            }
+        }
+        catch
+        {
+            // Non-fatal; user secrets is a convenience
+        }
+
+        return null;
+    }
+
+    private static string GetUserSecretsFilePath(string id)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            var appdata = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            return Path.Combine(appdata, "Microsoft", "UserSecrets", id, "secrets.json");
+        }
+
+        // macOS / Linux
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return Path.Combine(home, ".microsoft", "usersecrets", id, "secrets.json");
+    }
+
+    private static bool TryGetJsonString(System.Text.Json.JsonDocument doc, string[] path, out string? value)
+    {
+        value = null;
+        try
+        {
+            var elem = doc.RootElement;
+            foreach (var p in path)
+            {
+                if (elem.ValueKind != System.Text.Json.JsonValueKind.Object) return false;
+                if (!elem.TryGetProperty(p, out var next)) return false;
+                elem = next;
+            }
+
+            if (elem.ValueKind == System.Text.Json.JsonValueKind.String)
+            {
+                value = elem.GetString();
+                return true;
+            }
+        }
+        catch
+        {
+        }
+
+        return false;
+    }
+
+    private static bool TryParsePostgresUri(string uri, out string connectionString)
+    {
+        connectionString = null!;
+        try
+        {
+            var m = Regex.Match(uri, "^(?<scheme>postgresql|postgres)://(?<userinfo>[^@]+)@(?<hostport>[^/]+)/(?<db>[^?]+)(\?(?<query>.*))?$", RegexOptions.IgnoreCase);
+            if (!m.Success) return false;
+
+            var userinfo = m.Groups["userinfo"].Value; // user:pass
+            var hostport = m.Groups["hostport"].Value; // host:port or host
+            var db = Uri.UnescapeDataString(m.Groups["db"].Value);
+            var query = m.Groups["query"].Value;
+
+            var up = userinfo.Split(':', 2);
+            var user = Uri.UnescapeDataString(up[0]);
+            var pass = up.Length > 1 ? Uri.UnescapeDataString(up[1]) : string.Empty;
+
+            var hp = hostport.Split(':', 2);
+            var host = hp[0];
+            var port = hp.Length > 1 ? hp[1] : null;
+
+            var sb = new StringBuilder();
+            sb.Append("Host=").Append(host).Append(';');
+            if (!string.IsNullOrEmpty(port)) sb.Append("Port=").Append(port).Append(';');
+            sb.Append("Username=").Append(user).Append(';');
+            if (!string.IsNullOrEmpty(pass)) sb.Append("Password=").Append(pass).Append(';');
+            sb.Append("Database=").Append(db).Append(';');
+
+            if (!string.IsNullOrEmpty(query))
+            {
+                var pairs = query.Split('&', StringSplitOptions.RemoveEmptyEntries);
+                foreach (var p in pairs)
+                {
+                    var kv = p.Split('=', 2);
+                    var k = Uri.UnescapeDataString(kv[0]);
+                    var v = kv.Length > 1 ? Uri.UnescapeDataString(kv[1]) : string.Empty;
+                    // append as-is; some keys align with Npgsql settings
+                    sb.Append(k).Append('=').Append(v).Append(';');
+                }
+            }
+
+            connectionString = sb.ToString();
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static ClientConfig BuildClientConfig(CharismaSchema schema, string? connectionOverride, string? rootNamespaceOverride, string? outputOverride)

@@ -110,14 +110,22 @@ internal sealed class ModelWriter : IWriter
                     SyntaxFactory.ParseName($"{_rootNamespace}.Models"))
                 .AddMembers(classDeclaration);
 
+            var usings = new List<UsingDirectiveSyntax>
+            {
+                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System")),
+                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System.Collections.Generic")),
+                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System.Text.Json")),
+                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System.Text.Json.Serialization")),
+                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("Charisma.Runtime"))
+            };
+
+            if (schema.Enums.Count > 0)
+            {
+                usings.Insert(usings.Count - 1, SyntaxFactory.UsingDirective(SyntaxFactory.ParseName($"{_rootNamespace}.Enums")));
+            }
+
             var unit = SyntaxFactory.CompilationUnit()
-                .AddUsings(
-                    SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System")),
-                    SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System.Collections.Generic")),
-                    SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System.Text.Json")),
-                    SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System.Text.Json.Serialization")),
-                    SyntaxFactory.UsingDirective(SyntaxFactory.ParseName($"{_rootNamespace}.Enums")),
-                    SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("Charisma.Runtime")))
+                .AddUsings(usings.ToArray())
                 .AddMembers(@namespace)
                 .NormalizeWhitespace();
 

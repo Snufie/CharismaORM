@@ -169,20 +169,93 @@ Where = new PostWhere {
 }
 ```
 
-## Relation filters
+Shorthand assignments
 
-To filter by related collections or single relations use relation-specific filters:
-
-- For one-to-many: `Some`, `None`, `Every` (e.g., comments on posts).
-- For single relation: `Is`, `IsNot` with a nested filter.
-
-Example: posts with at least one published comment:
+The generator now emits implicit conversions for scalar and enum filter types, so you can use a concise assignment instead of constructing a filter object explicitly. Examples:
 
 ```csharp
 Where = new PostWhere {
- Comments = new CommentListRelationFilter { Some = new CommentWhere { Published = new BoolFilter { Equals = true } } }
+  Title = "release",            // shorthand for new StringFilter { Equals = "release" }
+  Published = true,              // shorthand for new BoolFilter { Equals = true }
+  AuthorId = userId               // shorthand for new GuidFilter { Equals = userId }
+}
+
+// For relations, nested where inputs also accept shorthand on scalar fields:
+Where = new PostWhere {
+  Author = new AuthorRelationFilter {
+    Is = new AuthorWhere { Id = userId } // Id can be assigned directly
+  }
 }
 ```
+
+## Relation filters
+
+Relation filters let you express conditions over related records. There are two shapes:
+
+- Collection relation filters (one-to-many): `Some`, `None`, `Every`.
+- Single relation filters (many-to-one / one-to-one): `Is`, `IsNot`.
+
+When to use each:
+
+- `Some`: true when at least one related record matches the nested filter.
+  - Example: posts that have at least one published comment.
+  - Use when you want to assert existence of any matching child row.
+
+- `None`: true when zero related records match the nested filter.
+  - Example: posts that have no comments containing the word "spam".
+  - Use to exclude parent rows that have undesirable children.
+
+- `Every`: true when all related records match the nested filter (vacuously true for empty collections).
+  - Example: posts whose every comment is approved.
+  - Be careful: `Every` is true for empty child collections — combine with `Some`/`None` if you need different semantics.
+
+- `Is`: for single relations, true when the related single record satisfies the nested filter.
+  - Example: an order whose `Customer` satisfies `Country = 'NL'`.
+  - Use when filtering by properties of the single linked entity.
+
+- `IsNot`: for single relations, true when the related single record does not satisfy the nested filter (or when the relation is null depending on your model).
+  - Example: fetch items where the linked `Owner` is not in a given role.
+
+Examples
+
+Posts with at least one published comment:
+
+```csharp
+Where = new PostWhere {
+    Comments = new CommentListRelationFilter {
+        Some = new CommentWhere { Published = new BoolFilter { Equals = true } }
+    }
+}
+```
+
+Posts where every comment is approved (note: empty-comments posts are vacuously true):
+
+```csharp
+Where = new PostWhere {
+    Comments = new CommentListRelationFilter {
+        Every = new CommentWhere { Approved = new BoolFilter { Equals = true } }
+    }
+}
+```
+
+Filter by a single relation's fields:
+
+```csharp
+Where = new OrderWhere {
+    Customer = new CustomerRelationFilter {
+        Is = new CustomerWhere { Country = new StringFilter { Equals = "NL" } }
+    }
+}
+```
+
+Why not `field == value`?
+
+The generated filter objects are explicit, strongly-typed shapes that map to SQL-planner behavior. Allowing a raw `field == value` expression would require either:
+
+- A lambda-expression DSL (parsing/serializing expression trees), or
+- A major change to the generated API to accept arbitrary expression trees or runtime predicates.
+
+Both options are significant design changes (affecting generation, planner, and serialization). The current `Where` / `*Filter` shape keeps the surface explicit and safe, is easy to statically type-check, and maps cleanly to parameterized SQL. If you want a more ergonomic lambda-style API later, it can be added as a higher-level convenience wrapper that translates lambdas into the existing filter objects; it would be a separate feature rather than a small refactor.
 
 ## JSON filters
 

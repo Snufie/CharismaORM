@@ -144,18 +144,26 @@ internal sealed class ArgsWriter : IWriter
                 SyntaxFactory.ParseName($"{_rootNamespace}.Args"))
             .AddMembers(members.ToArray());
 
+        var usings = new List<UsingDirectiveSyntax>
+        {
+            SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System")),
+            SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System.Collections.Generic")),
+            SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System.Text.Json")),
+            SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System.Text.Json.Serialization")),
+            SyntaxFactory.UsingDirective(SyntaxFactory.ParseName($"{_rootNamespace}.Filters")),
+            SyntaxFactory.UsingDirective(SyntaxFactory.ParseName($"{_rootNamespace}.Select")),
+            SyntaxFactory.UsingDirective(SyntaxFactory.ParseName($"{_rootNamespace}.Omit")),
+            SyntaxFactory.UsingDirective(SyntaxFactory.ParseName($"{_rootNamespace}.Include")),
+            SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("Charisma.Runtime"))
+        };
+
+        if (schema.Enums.Count > 0)
+        {
+            usings.Insert(usings.Count - 1, SyntaxFactory.UsingDirective(SyntaxFactory.ParseName($"{_rootNamespace}.Enums")));
+        }
+
         return SyntaxFactory.CompilationUnit()
-            .AddUsings(
-                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System")),
-                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System.Collections.Generic")),
-                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System.Text.Json")),
-                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("System.Text.Json.Serialization")),
-                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName($"{_rootNamespace}.Filters")),
-                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName($"{_rootNamespace}.Select")),
-                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName($"{_rootNamespace}.Omit")),
-                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName($"{_rootNamespace}.Include")),
-                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName($"{_rootNamespace}.Enums")),
-                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName("Charisma.Runtime")))
+            .AddUsings(usings.ToArray())
             .AddMembers(@namespace)
             .NormalizeWhitespace();
     }
@@ -494,7 +502,7 @@ internal sealed class ArgsWriter : IWriter
         var props = new[]
         {
             BuildProp($"{model.Name}CreateInput", "Create", $"Create a new {model.Name} when no existing record matches."),
-            BuildProp($"{model.Name}WhereUniqueInput", "Where", $"Unique selector to connect an existing {model.Name}.")
+            BuildProp($"{model.Name}WhereUniqueInput", "ConnectWhere", $"Unique selector to connect an existing {model.Name}.")
         };
         return BuildClass($"{model.Name}CreateOrConnectInput", props, $"Create or connect helper for {model.Name} relations.");
     }

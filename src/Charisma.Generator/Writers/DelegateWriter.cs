@@ -209,8 +209,9 @@ internal sealed class DelegateWriter : IWriter
     private MethodDeclarationSyntax BuildFindFirstOrThrow(ModelDefinition model)
     {
         var argsType = SyntaxFactory.ParseTypeName($"{model.Name}FindFirstArgs");
+        // Return non-nullable Task<Model> and enforce throw-if-not-found in the generated body.
         return BuildDelegateMethod(
-                returnType: SyntaxFactory.ParseTypeName($"Task<{model.Name}?>"),
+            returnType: SyntaxFactory.ParseTypeName($"Task<{model.Name}>"),
             name: "FindFirstOrThrowAsync",
             argsType: argsType,
             queryType: QueryType.FindFirst,
@@ -941,14 +942,24 @@ internal sealed class DelegateWriter : IWriter
             : isMany
                 ? $"A list of {modelName} results."
                 : returnRecords
-                    ? $"A single {modelName} result or null."
+                    ? (throwIfNotFound
+                        ? $"A single {modelName} result; throws if no matching record is found."
+                        : $"A single {modelName} result or null.")
                     : "Scalar result.";
 
-        return SyntaxFactory.MethodDeclaration(returnType, name)
+        var method = SyntaxFactory.MethodDeclaration(returnType, name)
             .AddModifiers(SyntaxFactory.Token(SyntaxKind.PublicKeyword))
             .AddParameterListParameters(argsParam, ctParam)
             .WithBody(body)
             .WithLeadingTrivia(BuildDoc(summary, paramDocs, returnsDoc));
+
+        if (throwIfNotFound)
+        {
+            // Mark method async so we can await the executor and perform null-checks.
+            method = method.AddModifiers(SyntaxFactory.Token(SyntaxKind.AsyncKeyword));
+        }
+
+        return method;
     }
 
     /// <summary>
@@ -1003,7 +1014,62 @@ internal sealed class DelegateWriter : IWriter
                                         SyntaxFactory.ArgumentList(
                                             SyntaxFactory.SeparatedList(GetModelArguments(modelName, queryType, argsIdentifier, returnRecords, throwIfNotFound))))))));
 
-        // return _executor.ExecuteSingleAsync<T>(model, ct); or ExecuteMany/ExecuteNonQuery
+        // Handle executor invocation. If throwIfNotFound is set for a single-record query,
+        // generate an async flow that awaits the executor, checks for null, throws, and returns.
+        if (throwIfNotFound && !nonQuery && returnTypeSingle && returnRecords)
+        {
+            // Build: var result = await _executor.ExecuteSingleAsync<Model>(model, null, ct);
+            var typeArg = resultTypeOverride is not null
+                ? SyntaxFactory.IdentifierName(resultTypeOverride)
+                : SyntaxFactory.IdentifierName(modelName);
+
+            var execInvocation = SyntaxFactory.AwaitExpression(
+                SyntaxFactory.InvocationExpression(
+                    SyntaxFactory.MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        SyntaxFactory.IdentifierName("_executor"),
+                        SyntaxFactory.GenericName("ExecuteSingleAsync")
+                            .WithTypeArgumentList(
+                                SyntaxFactory.TypeArgumentList(
+                                    SyntaxFactory.SingletonSeparatedList<TypeSyntax>(
+                                        typeArg)))))
+                    .WithArgumentList(
+                        SyntaxFactory.ArgumentList(
+                            SyntaxFactory.SeparatedList(new[]
+                            {
+                                SyntaxFactory.Argument(SyntaxFactory.IdentifierName("model")),
+                                SyntaxFactory.Argument(SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression)),
+                                SyntaxFactory.Argument(SyntaxFactory.IdentifierName("ct"))
+                            }))));
+
+            var resultDecl = SyntaxFactory.LocalDeclarationStatement(
+                SyntaxFactory.VariableDeclaration(SyntaxFactory.IdentifierName("var"))
+                    .AddVariables(
+                        SyntaxFactory.VariableDeclarator("result")
+                            .WithInitializer(SyntaxFactory.EqualsValueClause(execInvocation))));
+
+            // if (result is null) throw new InvalidOperationException("No <Model> found.");
+            var ifStmt = SyntaxFactory.IfStatement(
+                SyntaxFactory.BinaryExpression(
+                    SyntaxKind.EqualsExpression,
+                    SyntaxFactory.IdentifierName("result"),
+                    SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression)),
+                SyntaxFactory.ThrowStatement(
+                    SyntaxFactory.ObjectCreationExpression(SyntaxFactory.IdentifierName("InvalidOperationException"))
+                        .WithArgumentList(
+                            SyntaxFactory.ArgumentList(
+                                SyntaxFactory.SingletonSeparatedList(
+                                    SyntaxFactory.Argument(
+                                        SyntaxFactory.LiteralExpression(
+                                            SyntaxKind.StringLiteralExpression,
+                                            SyntaxFactory.Literal($"No {modelName} record found."))))))));
+
+            var returnStmt = SyntaxFactory.ReturnStatement(SyntaxFactory.IdentifierName("result"));
+
+            return SyntaxFactory.Block(modelDecl, resultDecl, ifStmt, returnStmt);
+        }
+
+        // Fallback: previous behavior (no special throw handling)
         ExpressionSyntax call;
         if (nonQuery)
         {
@@ -1072,9 +1138,9 @@ internal sealed class DelegateWriter : IWriter
                         })));
         }
 
-        var returnStmt = SyntaxFactory.ReturnStatement(call);
+        var returnStmtFallback = SyntaxFactory.ReturnStatement(call);
 
-        return SyntaxFactory.Block(modelDecl, returnStmt);
+        return SyntaxFactory.Block(modelDecl, returnStmtFallback);
     }
 
     /// <summary>
