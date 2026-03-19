@@ -6,10 +6,10 @@
 
 #nullable enable
 
-using Charisma.Generated.Select;
-using Charisma.Generated.Omit;
+using Charisma.Generator.Tests.Generated.Select;
+using Charisma.Generator.Tests.Generated.Omit;
 
-namespace Charisma.Generated.Include
+namespace Charisma.Generator.Tests.Generated.Include
 {
     /// <summary>Relation include graph for Gebruiker. Mutually exclusive with Select and Omit.</summary>
     public partial class GebruikerInclude

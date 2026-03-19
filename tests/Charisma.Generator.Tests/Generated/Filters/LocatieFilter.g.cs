@@ -9,10 +9,10 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
-using Charisma.Generated.Enums;
+using Charisma.Generator.Tests.Generated.Enums;
 using Charisma.Runtime;
 
-namespace Charisma.Generated.Filters
+namespace Charisma.Generator.Tests.Generated.Filters
 {
     /// <summary>Logical filter for Locatie with AND/OR/XOR/NOT and per-field filters.</summary>
     public partial class LocatieWhereInput

@@ -12,9 +12,9 @@ using System.Threading.Tasks;
 using Charisma.QueryEngine;
 using Charisma.QueryEngine.Execution;
 using Charisma.Runtime;
-using Charisma.Generated.Models;
+using Charisma.Generator.Tests.Generated.Models;
 
-namespace Charisma.Generated
+namespace Charisma.Generator.Tests.Generated
 {
     public sealed partial class CharismaClient : IDisposable
     {

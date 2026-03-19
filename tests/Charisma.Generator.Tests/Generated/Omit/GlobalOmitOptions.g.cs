@@ -8,7 +8,7 @@
 
 using System.Collections.Generic;
 
-namespace Charisma.Generated.Omit
+namespace Charisma.Generator.Tests.Generated.Omit
 {
     /// <summary>Default omit masks keyed by model.</summary>
     public class GlobalOmitOptions

@@ -6,7 +6,7 @@
 
 #nullable enable
 
-namespace Charisma.Generated.Omit
+namespace Charisma.Generator.Tests.Generated.Omit
 {
     /// <summary>Field omission mask for Robot. Mutually exclusive with Select and Include.</summary>
     public partial class RobotOmit

@@ -12,14 +12,14 @@ using System.Threading;
 using System.Threading.Tasks;
 using Charisma.QueryEngine.Execution;
 using Charisma.QueryEngine.Model;
-using Charisma.Generated.Args;
-using Charisma.Generated.Models;
-using Charisma.Generated.Filters;
-using Charisma.Generated.Select;
-using Charisma.Generated.Include;
+using Charisma.Generator.Tests.Generated.Args;
+using Charisma.Generator.Tests.Generated.Models;
+using Charisma.Generator.Tests.Generated.Filters;
+using Charisma.Generator.Tests.Generated.Select;
+using Charisma.Generator.Tests.Generated.Include;
 using Charisma.Runtime;
 
-namespace Charisma.Generated.Models
+namespace Charisma.Generator.Tests.Generated.Models
 {
     public sealed partial class GebruikerDelegate
     {

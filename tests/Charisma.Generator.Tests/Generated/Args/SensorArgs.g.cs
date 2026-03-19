@@ -10,14 +10,14 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Charisma.Generated.Filters;
-using Charisma.Generated.Select;
-using Charisma.Generated.Omit;
-using Charisma.Generated.Include;
-using Charisma.Generated.Enums;
+using Charisma.Generator.Tests.Generated.Filters;
+using Charisma.Generator.Tests.Generated.Select;
+using Charisma.Generator.Tests.Generated.Omit;
+using Charisma.Generator.Tests.Generated.Include;
+using Charisma.Generator.Tests.Generated.Enums;
 using Charisma.Runtime;
 
-namespace Charisma.Generated.Args
+namespace Charisma.Generator.Tests.Generated.Args
 {
     /// <summary>Arguments for Sensor.findUnique. Provide Where and optionally Select, Omit, or Include (choose one).</summary>
     public partial class SensorFindUniqueArgs

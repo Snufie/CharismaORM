@@ -11,7 +11,7 @@ using System.Collections.Generic;
 using Charisma.QueryEngine.Metadata;
 using Charisma.Schema;
 
-namespace Charisma.Generated.Metadata
+namespace Charisma.Generator.Tests.Generated.Metadata
 {
     public static class ModelMetadataRegistry
     {

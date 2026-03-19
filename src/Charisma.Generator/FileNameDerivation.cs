@@ -154,10 +154,10 @@ internal static class FileNameDerivation
             .Where(n => n is not null)
             .Select(n => n!)
             .ToList();
-        // Prefer the canonical scalar filter hub when present.
+        // Prefer the canonical string filter hub when present.
         if (publicTypes.Contains("StringFilter", StringComparer.Ordinal))
         {
-            return "ScalarFilter";
+            return "StringFilter";
         }
 
         var whereUnique = publicTypes.FirstOrDefault(n => n.EndsWith("WhereUniqueInput", StringComparison.Ordinal));

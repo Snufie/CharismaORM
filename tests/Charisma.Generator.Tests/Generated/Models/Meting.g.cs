@@ -10,10 +10,10 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Charisma.Generated.Enums;
+using Charisma.Generator.Tests.Generated.Enums;
 using Charisma.Runtime;
 
-namespace Charisma.Generated.Models
+namespace Charisma.Generator.Tests.Generated.Models
 {
     /// <summary>Generated POCO for model Meting.</summary>
     public partial class Meting

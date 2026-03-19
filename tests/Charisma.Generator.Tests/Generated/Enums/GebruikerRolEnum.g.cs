@@ -8,7 +8,7 @@
 
 using System.Text.Json.Serialization;
 
-namespace Charisma.Generated.Enums
+namespace Charisma.Generator.Tests.Generated.Enums
 {
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum GebruikerRolEnum

@@ -542,6 +542,19 @@ internal sealed class FilterWriter : IWriter
         }
 
         // Enum filters are named {EnumName}Filter — support implicit from enum.
+        // Avoid treating relation filters (e.g. 'ModelRelationFilter') as enum filters.
+        if (filterName.EndsWith("RelationFilter", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        // JSON helper filters (JsonArrayFilter/JsonPathFilter) are not enums/scalars and
+        // should not receive implicit conversion operators.
+        if (filterName == "JsonArrayFilter" || filterName == "JsonPathFilter")
+        {
+            return null;
+        }
+
         if (filterName.EndsWith("Filter", StringComparison.Ordinal) && filterName.Length > "Filter".Length)
         {
             var enumName = filterName.Substring(0, filterName.Length - "Filter".Length);

@@ -6,7 +6,7 @@
 
 #nullable enable
 
-namespace Charisma.Generated.Args
+namespace Charisma.Generator.Tests.Generated.Args
 {
     public enum SortOrder
     {
