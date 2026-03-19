@@ -154,11 +154,10 @@ internal static class FileNameDerivation
             .Where(n => n is not null)
             .Select(n => n!)
             .ToList();
-
         // Prefer the canonical scalar filter hub when present.
         if (publicTypes.Contains("StringFilter", StringComparer.Ordinal))
         {
-            return "StringFilter";
+            return "ScalarFilter";
         }
 
         var whereUnique = publicTypes.FirstOrDefault(n => n.EndsWith("WhereUniqueInput", StringComparison.Ordinal));
@@ -170,6 +169,7 @@ internal static class FileNameDerivation
         var firstFilter = publicTypes.FirstOrDefault(n => n.EndsWith("Filter", StringComparison.Ordinal));
         if (!string.IsNullOrWhiteSpace(firstFilter))
         {
+            Console.WriteLine($"[Debug] Found filter-like type: {firstFilter}");
             return firstFilter!;
         }
 
