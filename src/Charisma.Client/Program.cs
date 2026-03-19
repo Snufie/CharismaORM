@@ -14,15 +14,20 @@ using Charisma.Runtime;
 
 namespace Charisma.Client;
 
+
+
 /// <summary>
 /// Command-line entry point for generating Charisma client code from a schema.
 /// </summary>
-public static class Program
+public static partial class Program
 {
     // Hardcoded generator version for headers.
     private const string GeneratorVersion = "1.8.0";
 
     private sealed record ClientConfig(string? ConnectionString, string RootNamespace, string OutputDirectory);
+
+    [System.Text.RegularExpressions.GeneratedRegex("^(?<scheme>postgresql|postgres)://(?<userinfo>[^@]+)@(?<hostport>[^/]+)/(?<db>[^?]+)(\\?(?<query>.*))?$", RegexOptions.IgnoreCase)]
+    private static partial Regex PostgresUriRegex();
 
     // Entry: charisma generate <schemaPath> <outputPath?> [--root-namespace MyApp.Generated]
     /// <summary>
@@ -638,12 +643,14 @@ public static class Program
         return false;
     }
 
+
+
     private static bool TryParsePostgresUri(string uri, out string connectionString)
     {
         connectionString = null!;
         try
         {
-            var m = Regex.Match(uri, "^(?<scheme>postgresql|postgres)://(?<userinfo>[^@]+)@(?<hostport>[^/]+)/(?<db>[^?]+)(\?(?<query>.*))?$", RegexOptions.IgnoreCase);
+            var m = PostgresUriRegex().Match(uri);
             if (!m.Success) return false;
 
             var userinfo = m.Groups["userinfo"].Value; // user:pass

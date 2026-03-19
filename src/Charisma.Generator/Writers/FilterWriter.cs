@@ -571,9 +571,9 @@ internal sealed class FilterWriter : IWriter
             .WithInitializer(initializer);
 
         var conv = SyntaxFactory.ConversionOperatorDeclaration(
-                SyntaxFactory.TokenList(SyntaxFactory.Token(SyntaxKind.PublicKeyword), SyntaxFactory.Token(SyntaxKind.StaticKeyword)),
-                SyntaxFactory.Token(SyntaxKind.ImplicitKeyword),
-                SyntaxFactory.ParseTypeName(targetFilterName))
+                        SyntaxFactory.Token(SyntaxKind.ImplicitKeyword),
+                        SyntaxFactory.ParseTypeName(targetFilterName))
+            .WithModifiers(SyntaxFactory.TokenList(SyntaxFactory.Token(SyntaxKind.PublicKeyword), SyntaxFactory.Token(SyntaxKind.StaticKeyword)))
             .WithParameterList(SyntaxFactory.ParameterList(SyntaxFactory.SingletonSeparatedList(param)))
             .WithExpressionBody(SyntaxFactory.ArrowExpressionClause(creation))
             .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken))
